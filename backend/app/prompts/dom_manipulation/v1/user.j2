@@ -1,0 +1,23 @@
+## User Request
+
+{{ user_prompt }}
+
+## HTML Structure
+
+The following HTML has been preprocessed and each element has been assigned a data-element-id attribute for reference:
+
+```html
+{{ processed_html }}
+```
+
+## Task
+
+Analyze the HTML structure and generate patch operations to fulfill the user's request: "{{ user_prompt }}"
+
+Remember:
+- Only reference elements by their data-element-id attributes
+- Generate safe HTML (no scripts, no event handlers)
+- Be precise and minimal in your changes
+- Consider operation order and dependencies
+
+Respond with valid JSON following the schema provided in the system prompt.

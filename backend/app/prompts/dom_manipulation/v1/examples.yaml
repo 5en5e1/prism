@@ -1,0 +1,61 @@
+# Few-shot examples for DOM manipulation
+
+- user_prompt: "Move the navigation menu to the top of the page"
+  html: |
+    <body data-element-id="e0">
+      <header data-element-id="e1">
+        <h1 data-element-id="e2">My Site</h1>
+      </header>
+      <nav data-element-id="e3">
+        <a data-element-id="e4" href="/">Home</a>
+        <a data-element-id="e5" href="/about">About</a>
+      </nav>
+      <main data-element-id="e6">
+        <p data-element-id="e7">Content here</p>
+      </main>
+    </body>
+  response:
+    patches:
+      - op: move
+        selector: "[data-element-id='e3']"
+        target_selector: "[data-element-id='e1']"
+        position: after
+    element_count: 8
+    applied_skeletonization: false
+
+- user_prompt: "Add a 'featured' class to the first article"
+  html: |
+    <div data-element-id="e0" class="container">
+      <article data-element-id="e1">
+        <h2 data-element-id="e2">First Post</h2>
+      </article>
+      <article data-element-id="e3">
+        <h2 data-element-id="e4">Second Post</h2>
+      </article>
+    </div>
+  response:
+    patches:
+      - op: add_class
+        selector: "[data-element-id='e1']"
+        class_name: featured
+    element_count: 5
+    applied_skeletonization: false
+
+- user_prompt: "Wrap all images in figure tags"
+  html: |
+    <div data-element-id="e0" class="gallery">
+      <img data-element-id="e1" src="photo1.jpg" alt="Photo 1">
+      <img data-element-id="e2" src="photo2.jpg" alt="Photo 2">
+    </div>
+  response:
+    patches:
+      - op: wrap
+        selector: "[data-element-id='e1']"
+        wrapper_html: "<figure></figure>"
+      - op: wrap
+        selector: "[data-element-id='e2']"
+        wrapper_html: "<figure></figure>"
+    element_count: 3
+    applied_skeletonization: false
+
+# Made with Bob

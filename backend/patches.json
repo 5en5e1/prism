@@ -1,0 +1,8 @@
+[
+  {
+    "op": "move",
+    "selector": "[data-element-id='e28']",
+    "target_selector": "[data-element-id='e4']",
+    "position": "before"
+  }
+]

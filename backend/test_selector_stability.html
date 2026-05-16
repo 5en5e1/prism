@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Selector Stability Test Page</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #333;
+            border-bottom: 3px solid #007bff;
+            padding-bottom: 10px;
+        }
+        
+        h2 {
+            color: #555;
+            margin-top: 0;
+        }
+        
+        .selector-example {
+            background: #f8f9fa;
+            padding: 15px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .stability-level {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .high { background: #28a745; color: white; }
+        .medium { background: #ffc107; color: black; }
+        .low { background: #dc3545; color: white; }
+        
+        #main-sidebar {
+            background: #e9ecef;
+            padding: 20px;
+            border-radius: 8px;
+        }
+        
+        .video-card {
+            background: white;
+            padding: 15px;
+            margin: 10px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+        }
+        
+        [role="navigation"] {
+            background: #007bff;
+            color: white;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        [data-testid="comment-section"] {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        
+        .result-box {
+            background: #d4edda;
+            border: 1px solid #c3e6cb;
+            padding: 15px;
+            margin: 20px 0;
+            border-radius: 4px;
+        }
+        
+        .code-block {
+            background: #2d2d2d;
+            color: #f8f8f2;
+            padding: 15px;
+            border-radius: 4px;
+            overflow-x: auto;
+            margin: 10px 0;
+        }
+        
+        button {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 5px;
+        }
+        
+        button:hover {
+            background: #0056b3;
+        }
+        
+        #test-results {
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Selector Stability Test Page</h1>
+    
+    <div class="test-section">
+        <h2>Purpose</h2>
+        <p>This page demonstrates the improved selector stability for dynamic content. It shows how different selector types work across page reloads and content changes.</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Selector Priority Levels</h2>
+        
+        <div class="selector-example">
+            <strong>1. ID Selector</strong> <span class="stability-level high">HIGH STABILITY</span>
+            <div class="code-block">#unique-id</div>
+            <p>✅ Best for: Static elements with unique IDs</p>
+            <p>✅ Works across: All page loads</p>
+        </div>
+        
+        <div class="selector-example">
+            <strong>2. Class Selector</strong> <span class="stability-level high">HIGH STABILITY</span>
+            <div class="code-block">aside.sidebar</div>
+            <p>✅ Best for: Semantic elements with consistent classes</p>
+            <p>✅ Works across: Most page loads (if classes don't change)</p>
+        </div>
+        
+        <div class="selector-example">
+            <strong>3. Semantic Attributes</strong> <span class="stability-level high">HIGH STABILITY</span>
+            <div class="code-block">nav[role="navigation"]</div>
+            <p>✅ Best for: Accessibility-focused sites</p>
+            <p>✅ Works across: All page loads (semantic attributes are stable)</p>
+        </div>
+        
+        <div class="selector-example">
+            <strong>4. Data Attributes</strong> <span class="stability-level medium">MEDIUM STABILITY</span>
+            <div class="code-block">div[data-testid="comment-section"]</div>
+            <p>⚠️ Best for: Test-friendly sites</p>
+            <p>⚠️ Works across: Depends on implementation</p>
+        </div>
+        
+        <div class="selector-example">
+            <strong>5. Position-based (nth-child)</strong> <span class="stability-level low">LOW STABILITY</span>
+            <div class="code-block">div:nth-child(3)</div>
+            <p>❌ Best for: Nothing (avoid if possible)</p>
+            <p>❌ Works across: Breaks with any content changes</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test Elements</h2>
+        
+        <!-- High Stability: ID -->
+        <div id="main-sidebar" class="sidebar">
+            <h3>Sidebar with ID</h3>
+            <p>Selector: <code>#main-sidebar</code></p>
+            <p>Stability: <span class="stability-level high">HIGH</span></p>
+        </div>
+        
+        <!-- High Stability: Class -->
+        <aside class="sidebar secondary-nav">
+            <h3>Aside with Classes</h3>
+            <p>Selector: <code>aside.sidebar</code></p>
+            <p>Stability: <span class="stability-level high">HIGH</span></p>
+        </aside>
+        
+        <!-- High Stability: Semantic Attribute -->
+        <nav role="navigation">
+            <h3>Navigation with Role</h3>
+            <p>Selector: <code>nav[role="navigation"]</code></p>
+            <p>Stability: <span class="stability-level high">HIGH</span></p>
+        </nav>
+        
+        <!-- Medium Stability: Data Attribute -->
+        <div data-testid="comment-section">
+            <h3>Comments with Data Attribute</h3>
+            <p>Selector: <code>div[data-testid="comment-section"]</code></p>
+            <p>Stability: <span class="stability-level medium">MEDIUM</span></p>
+        </div>
+        
+        <!-- Low Stability: Dynamic Content -->
+        <div class="video-container">
+            <h3>Dynamic Video List (Simulates YouTube)</h3>
+            <div class="video-card">Video 1 - Changes on reload</div>
+            <div class="video-card">Video 2 - Changes on reload</div>
+            <div class="video-card">Video 3 - Changes on reload</div>
+            <p>Selector: <code>div.video-card:nth-child(2)</code></p>
+            <p>Stability: <span class="stability-level low">LOW</span> - Content changes!</p>
+        </div>
+    </div>
+
+    <div class="test-section">
+        <h2>Interactive Tests</h2>
+        <p>Click the buttons to test selector stability:</p>
+        
+        <button onclick="testSelector('#main-sidebar', 'ID Selector')">Test ID Selector</button>
+        <button onclick="testSelector('aside.sidebar', 'Class Selector')">Test Class Selector</button>
+        <button onclick="testSelector('nav[role=navigation]', 'Role Selector')">Test Role Selector</button>
+        <button onclick="testSelector('[data-testid=comment-section]', 'Data Attribute')">Test Data Attribute</button>
+        <button onclick="testSelector('.video-card:nth-child(2)', 'nth-child (Unstable)')">Test nth-child</button>
+        <button onclick="clearResults()">Clear Results</button>
+        
+        <div id="test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>CSS Patch Example</h2>
+        <p>Example of LLM-generated CSS patch for moving a sidebar:</p>
+        
+        <div class="code-block">
+{
+  "patches": [
+    {
+      "op": "move",
+      "selector": "#main-sidebar",
+      "target_selector": "body",
+      "position": "prepend"
+    },
+    {
+      "op": "set_attr",
+      "selector": "#main-sidebar",
+      "name": "style",
+      "value": "position: fixed; top: 20px; right: 20px; width: 250px; z-index: 1000;"
+    }
+  ]
+}
+        </div>
+        
+        <button onclick="applyCSSPatch()">Apply CSS Patch (Demo)</button>
+        <button onclick="resetCSSPatch()">Reset</button>
+    </div>
+
+    <div class="test-section">
+        <h2>Key Improvements</h2>
+        <ul>
+            <li>✅ <strong>LLM Controls CSS</strong> - Backend no longer adds automatic CSS enhancement</li>
+            <li>✅ <strong>Stable Selectors</strong> - Priority system favors IDs, classes, and semantic attributes</li>
+            <li>✅ <strong>Dynamic Content Support</strong> - Better handling of sites like YouTube, Twitter</li>
+            <li>✅ <strong>Clear Prompts</strong> - LLM knows when and how to add CSS</li>
+        </ul>
+    </div>
+
+    <script>
+        function testSelector(selector, name) {
+            const resultsDiv = document.getElementById('test-results');
+            const element = document.querySelector(selector);
+            
+            if (element) {
+                const result = document.createElement('div');
+                result.className = 'result-box';
+                result.innerHTML = `
+                    <strong>✅ ${name}</strong><br>
+                    Selector: <code>${selector}</code><br>
+                    Found: ${element.tagName.toLowerCase()}${element.className ? '.' + element.className.split(' ').join('.') : ''}<br>
+                    Text: "${element.textContent.substring(0, 50)}..."
+                `;
+                resultsDiv.appendChild(result);
+            } else {
+                const result = document.createElement('div');
+                result.className = 'result-box';
+                result.style.background = '#f8d7da';
+                result.style.borderColor = '#f5c6cb';
+                result.innerHTML = `
+                    <strong>❌ ${name}</strong><br>
+                    Selector: <code>${selector}</code><br>
+                    Status: Element not found
+                `;
+                resultsDiv.appendChild(result);
+            }
+        }
+        
+        function clearResults() {
+            document.getElementById('test-results').innerHTML = '';
+        }
+        
+        let originalStyle = '';
+        
+        function applyCSSPatch() {
+            const sidebar = document.getElementById('main-sidebar');
+            originalStyle = sidebar.getAttribute('style') || '';
+            sidebar.setAttribute('style', 'position: fixed; top: 20px; right: 20px; width: 250px; z-index: 1000; background: #e9ecef; padding: 20px; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.2);');
+            
+            const result = document.createElement('div');
+            result.className = 'result-box';
+            result.innerHTML = `
+                <strong>✅ CSS Patch Applied!</strong><br>
+                The sidebar is now positioned in the top-right corner using fixed positioning.<br>
+                This demonstrates how the LLM can generate CSS patches for visual changes.
+            `;
+            document.getElementById('test-results').appendChild(result);
+        }
+        
+        function resetCSSPatch() {
+            const sidebar = document.getElementById('main-sidebar');
+            sidebar.setAttribute('style', originalStyle);
+            clearResults();
+        }
+    </script>
+</body>
+</html>

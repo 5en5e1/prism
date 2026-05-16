@@ -1,0 +1,30 @@
+{
+  "trace_id": "7649466d-a703-47c6-ba36-75da9c66a4f5",
+  "use_case": "dom_manipulation",
+  "status": "ok",
+  "result": {
+    "patches": [
+      {
+        "op": "move",
+        "selector": "[data-element-id='e28']",
+        "target_selector": "[data-element-id='e4']",
+        "position": "after"
+      }
+    ],
+    "element_count": 40,
+    "applied_skeletonization": false
+  },
+  "warnings": [],
+  "usage": {
+    "input_tokens": 1475,
+    "output_tokens": 73,
+    "model": "gpt-4o"
+  },
+  "timing_ms": {
+    "preprocess_ms": 3.2702919997973368,
+    "ai_ms": 2510.304676998203,
+    "postprocess_ms": 0.20743999994010665,
+    "total_ms": 2513.7824089979404
+  },
+  "error": null
+}

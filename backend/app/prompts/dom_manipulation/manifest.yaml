@@ -1,0 +1,13 @@
+name: dom_manipulation
+active_version: v1
+versions:
+  v1:
+    system: v1/system.j2
+    user: v1/user.j2
+    examples: v1/examples.yaml
+    model: gpt-4o
+    temperature: 0.2
+    response_format: json_schema
+    schema_ref: schemas.dom_manipulation.DOMManipulationResult
+
+# Made with Bob
