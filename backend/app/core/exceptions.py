@@ -83,14 +83,6 @@ class HandlerNotFoundError(HandlerError):
         self.handler_name = handler_name
 
 
-class HandlerDisabledError(HandlerError):
-    """Handler is disabled via feature flag."""
-
-    def __init__(self, handler_name: str):
-        super().__init__(f"Handler '{handler_name}' is disabled", retryable=False)
-        self.handler_name = handler_name
-
-
 class ValidationError(HandlerError):
     """Request or response validation failed."""
 

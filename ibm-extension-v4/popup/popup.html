@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>DOM Patch Assistant</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main class="popup-shell">
+      <header class="tab-header">
+        <p class="eyebrow">DOM Patch Assistant</p>
+        <h1 id="tabTitle">Current tab</h1>
+        <p id="tabUrl" class="tab-url"></p>
+      </header>
+
+      <section class="prompt-section" aria-label="Prompt input">
+        <div class="prompt-composer">
+          <textarea id="promptInput" rows="5" placeholder="Move the sidebar to the top right"></textarea>
+          <div class="composer-footer">
+            <!-- Mode buttons are rendered dynamically from GET /api/v1/modes -->
+            <div class="mode-row" id="modeRow" role="radiogroup" aria-label="Generation mode"></div>
+            <button id="applyPrompt" type="button" class="generate-button">Generate</button>
+          </div>
+          <p id="composerStatus" class="composer-status" aria-live="polite"></p>
+        </div>
+      </section>
+
+      <section class="saves-section" aria-label="Prompt story">
+        <button id="historyToggle" type="button" class="history-toggle" aria-expanded="false">
+          <span id="historyArrow" aria-hidden="true">&gt;</span>
+          <span>Story</span>
+        </button>
+        <div class="saves-stack">
+          <div id="currentCache" class="version-list"></div>
+          <div id="historyPanel" class="history-panel" hidden>
+            <div id="historyList" class="version-list history-list"></div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>

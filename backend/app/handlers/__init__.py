@@ -3,9 +3,9 @@ Handler modules.
 
 This module imports all handler implementations to trigger their registration.
 """
-# Import all handlers to trigger @register_handler decorators
-from . import dom_manipulation, qa, redesign  # noqa: F401
+# Import the handler to trigger its @register_handler decorator
+from . import dom_manipulation  # noqa: F401
 
-__all__ = ["dom_manipulation", "qa", "redesign"]
+__all__ = ["dom_manipulation"]
 
 # Made with Bob

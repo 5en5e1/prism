@@ -129,22 +129,6 @@ class Settings(BaseSettings):
         default=60, description="Rate limit per IP per minute"
     )
 
-    # Feature Flags
-    feature_flag_dom_manipulation: bool = Field(
-        default=True, description="Enable DOM manipulation handler"
-    )
-    feature_flag_qa: bool = Field(default=False, description="Enable QA handler")
-    feature_flag_redesign: bool = Field(default=False, description="Enable redesign handler")
-
-    def is_handler_enabled(self, handler_name: str) -> bool:
-        """Check if a handler is enabled via feature flags."""
-        flag_map = {
-            "dom_manipulation": self.feature_flag_dom_manipulation,
-            "qa": self.feature_flag_qa,
-            "redesign": self.feature_flag_redesign,
-        }
-        return flag_map.get(handler_name, False)
-
 
 # Global settings instance
 settings = Settings()

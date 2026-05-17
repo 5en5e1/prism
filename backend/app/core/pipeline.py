@@ -2,8 +2,7 @@
 import time
 from typing import Any
 
-from ..config import settings
-from ..core.exceptions import HandlerDisabledError, PipelineError
+from ..core.exceptions import PipelineError
 from ..core.registry import get_handler
 from ..core.tracing import get_logger
 from ..handlers.base import Handler
@@ -60,10 +59,6 @@ class Pipeline:
         timing: dict[str, float] = {}
 
         try:
-            # Check if handler is enabled
-            if not settings.is_handler_enabled(use_case):
-                raise HandlerDisabledError(use_case)
-
             # Get handler class and instantiate
             handler_class = get_handler(use_case)
             handler: Handler[Any, Any] = handler_class()

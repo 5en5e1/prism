@@ -1,7 +1,9 @@
 """Shared request/response envelope schemas."""
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+
+from ..core.modes import is_known_mode
 
 
 class ClientMetadata(BaseModel):
@@ -12,20 +14,45 @@ class ClientMetadata(BaseModel):
 
 
 class ProcessRequest(BaseModel):
-    """Request envelope for the /api/v1/process endpoint."""
+    """Request envelope for the /api/v1/process endpoint.
 
-    use_case: Literal["dom_manipulation", "qa", "redesign"] = Field(
-        ..., description="Use case handler to invoke"
-    )
+    There is a single processing path (DOM manipulation handles every
+    request), so there is no use-case selector. Unknown fields are ignored
+    by default, so older clients still sending ``use_case`` keep working.
+    """
+
     page_url: str = Field(..., description="URL of the page being processed")
     html: str = Field(..., description="HTML content to process")
-    user_prompt: str = Field(..., description="User's natural language instruction")
+    user_prompt: str = Field(
+        default="", description="User's natural language instruction (optional if a mode is selected)"
+    )
+    selected_mode: str | None = Field(
+        default=None,
+        description="Mode key (from GET /modes), or null for no mode. The "
+        "backend resolves its instruction; clients never send instruction text.",
+    )
     params: dict[str, Any] = Field(
-        default_factory=dict, description="Use-case-specific parameters"
+        default_factory=dict, description="Handler-specific parameters"
     )
     client_metadata: ClientMetadata = Field(
         default_factory=ClientMetadata, description="Client metadata"
     )
+
+    @model_validator(mode="after")
+    def _validate_mode_and_prompt(self) -> "ProcessRequest":
+        if not is_known_mode(self.selected_mode):
+            raise ValueError(
+                f"Unknown selected_mode '{self.selected_mode}'. It must match "
+                "a mode prompt file on the backend, or be null."
+            )
+        # Same rule the extension enforces: with no mode there must be a
+        # prompt. (Mode + blank instruction + blank prompt is rejected later
+        # at composition time with a precise message.)
+        if self.selected_mode is None and not self.user_prompt.strip():
+            raise ValueError(
+                "user_prompt is required when no mode is selected."
+            )
+        return self
 
 
 class UsageInfo(BaseModel):

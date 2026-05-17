@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>IP Extension Starter Options</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="settings-shell">
+      <header>
+        <p class="eyebrow">Settings</p>
+        <h1>DOM Patch Options</h1>
+      </header>
+
+      <label class="field-row">
+        <span>
+          <strong>API base URL</strong>
+          <small>Used for /api/v1/process and /api/v1/health.</small>
+        </span>
+        <input id="apiBaseUrl" type="url" placeholder="http://localhost:8000">
+      </label>
+
+      <label class="setting-row">
+        <span>
+          <strong>Enable content script</strong>
+          <small>Lets the extension run on pages matched by the manifest.</small>
+        </span>
+        <input id="enabled" type="checkbox">
+      </label>
+
+      <p id="saveState" class="save-state" aria-live="polite"></p>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>
