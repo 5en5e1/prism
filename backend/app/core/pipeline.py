@@ -103,8 +103,9 @@ class Pipeline:
                 messages=[{"role": msg.role, "content": msg.content} for msg in messages],
                 model=handler.model_config.model,
                 temperature=handler.model_config.temperature,
-                max_tokens=handler.model_config.max_tokens,
+                max_completion_tokens=handler.model_config.max_completion_tokens,
                 response_format=handler.model_config.response_format,
+                reasoning_effort=handler.model_config.reasoning_effort,
             )
             timing["ai_ms"] = (time.perf_counter() - start) * 1000
 
@@ -131,6 +132,15 @@ class Pipeline:
 
             # Build response
             timing["total_ms"] = sum(timing.values())
+
+            logger.info(
+                "Pipeline complete, returning response",
+                extra={
+                    "use_case": use_case,
+                    "result_bytes": len(result.model_dump_json()),
+                    "total_ms": timing["total_ms"],
+                },
+            )
 
             return ProcessResponse(
                 trace_id=trace_id,

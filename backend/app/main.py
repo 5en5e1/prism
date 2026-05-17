@@ -1,5 +1,6 @@
 """FastAPI application entry point."""
 import logging
+import re
 import sys
 from contextlib import asynccontextmanager
 
@@ -82,10 +83,28 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # CORS middleware
+    # CORS middleware.
+    #
+    # Starlette matches allow_origins by EXACT string only -- it has no glob
+    # support. A configured value like "chrome-extension://*" would never
+    # match a real origin ("chrome-extension://<id>"), so responses ship
+    # without Access-Control-Allow-Origin and the browser silently discards
+    # them (the extension's fetch never resolves -- looks like a hang).
+    # Translate any wildcard pattern into allow_origin_regex; keep literals
+    # in allow_origins.
+    exact_origins: list[str] = []
+    regex_parts: list[str] = []
+    for origin in settings.cors_allowed_origins:
+        if "*" in origin:
+            regex_parts.append(re.escape(origin).replace(r"\*", ".*"))
+        else:
+            exact_origins.append(origin)
+    allow_origin_regex = "|".join(regex_parts) or None
+
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_allowed_origins,
+        allow_origins=exact_origins,
+        allow_origin_regex=allow_origin_regex,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

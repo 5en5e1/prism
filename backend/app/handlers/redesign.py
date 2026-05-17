@@ -1,4 +1,5 @@
 """Redesign handler (stub for future implementation)."""
+from ..config import settings
 from ..core.registry import register_handler
 from ..handlers.base import Handler, Message, ModelConfig, ProcessedContext
 from ..schemas.redesign import RedesignParams, RedesignRequest, RedesignResult
@@ -23,9 +24,9 @@ class RedesignHandler(Handler[RedesignRequest, RedesignResult]):
     @property
     def model_config(self) -> ModelConfig:
         return ModelConfig(
-            model="gpt-4o",
+            model=settings.openai_default_model,
             temperature=0.5,
-            max_tokens=4000,
+            max_completion_tokens=4000,
             response_format="json_schema",
         )
 

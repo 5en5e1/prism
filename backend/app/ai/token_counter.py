@@ -27,8 +27,24 @@ def count_tokens(text: str, model: str = "gpt-4o") -> int:
         logger.warning("tiktoken not available, using character-based estimation")
         return len(text) // 4
 
+    encoding = None
     try:
         encoding = tiktoken.encoding_for_model(model)
+    except KeyError:
+        # Newer/unknown models (gpt-5*, etc.) aren't in tiktoken's model map.
+        # Fall back to the most modern encoding this tiktoken build ships
+        # (o200k_base on recent builds, cl100k_base on older ones) -- still a
+        # far better estimate than chars/4.
+        for name in ("o200k_base", "cl100k_base"):
+            try:
+                encoding = tiktoken.get_encoding(name)
+                break
+            except Exception:
+                continue
+    if encoding is None:
+        logger.warning("No tiktoken encoding available, using estimation")
+        return len(text) // 4
+    try:
         return len(encoding.encode(text))
     except Exception as e:
         logger.warning(f"Failed to count tokens with tiktoken: {e}, using estimation")

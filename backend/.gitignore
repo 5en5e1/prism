@@ -19,15 +19,22 @@ wheels/
 *.egg-info/
 .installed.cfg
 *.egg
+MANIFEST
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+*.env
 
 # Virtual environments
-.env
-.venv
+.venv/
 env/
 venv/
 ENV/
 env.bak/
 venv.bak/
+.python-version
 
 # IDEs
 .vscode/
@@ -35,22 +42,67 @@ venv.bak/
 *.swp
 *.swo
 *~
+.project
+.pydevproject
+.settings/
 
 # Testing
 .pytest_cache/
 .coverage
+.coverage.*
 htmlcov/
 .tox/
+.nox/
+*.cover
+.hypothesis/
+nosetests.xml
+coverage.xml
+*.coveragerc
 
 # Logs
 *.log
+logs/
+*.log.*
 
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
 
 # Project specific
 *.db
 *.sqlite
+*.sqlite3
+
+# Temporary files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+
+# Jupyter Notebook
+.ipynb_checkpoints/
+*.ipynb
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Pyre type checker
+.pyre/
+
+# pytype static type analyzer
+.pytype/
+
+# Cython debug symbols
+cython_debug/
+
+# Ruff
+.ruff_cache/
+
+# Type checking
+.pyright/
 
 # Made with Bob

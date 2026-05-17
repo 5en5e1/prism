@@ -1,22 +1,31 @@
-"""DOM manipulation handler implementation."""
+"""DOM manipulation handler - anchored patch, live-DOM injection mode.
+
+The model receives a compact anchored skeleton and returns a small JSON
+patch list keyed by anchor id. By default ("inject") we return the original
+HTML byte-for-byte plus a runtime <script> that applies those patches to the
+live, post-JS DOM and re-asserts them across re-renders -- so it works for
+static, dynamic, animated and SPA sites without any fidelity loss. A legacy
+"server" mode (parse + reserialize) is kept for non-JS consumers.
+"""
 import json
-import re
-from typing import Any
 
-from bs4 import BeautifulSoup
-
-from ..core.exceptions import MalformedResponseError, PostprocessError, ValidationError
+from ..config import settings
+from ..core.exceptions import MalformedResponseError, OversizeError, ValidationError
 from ..core.registry import register_handler
 from ..core.tracing import get_logger
 from ..handlers.base import Handler, Message, ModelConfig, ProcessedContext
-from ..preprocessing.cleaner import clean_html
-from ..preprocessing.id_anchoring import assign_element_ids
-from ..preprocessing.skeletonizer import skeletonize_html
+from ..preprocessing.anchor_skeleton import build_anchored_skeleton
+from ..preprocessing.patch_applier import _DESTRUCTIVE, _PROTECTED, apply_patches
+from ..preprocessing.selector import (
+    compute_unique_ids,
+    element_hint,
+    robust_selector,
+)
 from ..prompts.loader import get_prompt_loader
 from ..schemas.dom_manipulation import (
     DOMManipulationRequest,
     DOMManipulationResult,
-    SetAttributeOperation,
+    DOMPatchResult,
 )
 
 logger = get_logger(__name__)
@@ -24,7 +33,7 @@ logger = get_logger(__name__)
 
 @register_handler("dom_manipulation")
 class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResult]):
-    """Handler for DOM manipulation tasks."""
+    """Handler for DOM manipulation via anchored patches."""
 
     @property
     def name(self) -> str:
@@ -41,78 +50,84 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
     @property
     def model_config(self) -> ModelConfig:
         return ModelConfig(
-            model="gpt-4o",
+            model=settings.openai_default_model,
             temperature=0.2,
-            max_tokens=4000,
+            # Patches are intent, not full HTML, so the output budget stays
+            # small even for very large pages.
+            max_completion_tokens=settings.dom_max_patch_tokens,
             response_format="json_schema",
+            reasoning_effort=settings.openai_reasoning_effort,
         )
 
     async def preprocess(
         self, html: str, params: DOMManipulationRequest
     ) -> ProcessedContext:
-        """
-        Preprocess HTML for DOM manipulation.
-        
-        Steps:
-        1. Clean HTML (remove scripts, comments, etc.)
-        2. Assign element IDs
-        3. Skeletonize if needed (replace long text with placeholders)
-        """
-        logger.info("Starting preprocessing for DOM manipulation")
+        """Anchor the DOM and build a token-budgeted skeleton.
 
-        # Stage 1: Clean HTML
-        cleaned_html = clean_html(html, preserve_hidden=False)
-        original_size = len(html)
-        cleaned_size = len(cleaned_html)
+        The full soup + anchor map are stashed in ``metadata`` for the
+        applier. Pages too large to represent within the budget are rejected
+        rather than silently truncated into a wrong edit.
+        """
+        logger.info("Building anchored skeleton for patch-based editing")
 
-        logger.info(
-            f"Cleaned HTML: {original_size} -> {cleaned_size} bytes "
-            f"({100 * (1 - cleaned_size / original_size):.1f}% reduction)"
+        # Pass raw HTML straight through. The skeleton (not this HTML) is
+        # what the model sees; the parsed DOM is what we return, so it must
+        # stay byte-faithful (scripts/styles/pre intact).
+        doc = build_anchored_skeleton(
+            html,
+            token_budget=settings.dom_skeleton_token_budget,
+            model=settings.openai_default_model,
+            prompt=params.user_prompt,
         )
 
-        # Stage 2: Assign element IDs
-        html_with_ids, element_id_map = assign_element_ids(cleaned_html)
-
-        # Stage 3: Skeletonize for structure-focused tasks
-        skeletonized_html = skeletonize_html(html_with_ids, max_text_length=80)
-        applied_skeletonization = len(skeletonized_html) < len(html_with_ids)
-
-        processed_size = len(skeletonized_html)
+        if doc.truncated:
+            raise OversizeError(
+                "Page is too large to represent within the skeleton token "
+                f"budget ({settings.dom_skeleton_token_budget} tokens, "
+                f"{doc.stats['element_count']} elements). Increase "
+                "DOM_SKELETON_TOKEN_BUDGET or scope the request to a "
+                "smaller region.",
+                retryable=False,
+            )
 
         logger.info(
-            f"Preprocessing complete: {len(element_id_map)} elements, "
-            f"skeletonization={'applied' if applied_skeletonization else 'skipped'}"
+            f"Skeleton ready: {doc.stats['original_size']} bytes / "
+            f"{doc.stats['element_count']} elements -> "
+            f"~{doc.stats['skeleton_tokens']} tokens"
         )
 
         return ProcessedContext(
-            processed_html=skeletonized_html,
-            element_id_map=element_id_map,
-            original_size=original_size,
-            processed_size=processed_size,
+            processed_html=doc.skeleton,
+            element_id_map={},
+            original_size=doc.stats["original_size"],
+            processed_size=doc.stats["skeleton_size"],
             chunk_count=1,
             metadata={
-                "applied_skeletonization": applied_skeletonization,
-                "element_count": len(element_id_map),
+                "patch_mode": True,
+                "soup": doc.soup,
+                "id_map": doc.id_map,
+                "original_html": html,
+                "css_context": doc.css_context,
+                "skeleton_stats": doc.stats,
             },
         )
 
     async def build_messages(
         self, context: ProcessedContext, params: DOMManipulationRequest, user_prompt: str
     ) -> list[Message]:
-        """Build OpenAI messages using Jinja templates."""
+        """Build messages: patch protocol system prompt + skeleton."""
         loader = get_prompt_loader()
 
-        # Render system prompt
         system_content = loader.render_template("dom_manipulation", "system")
         if not system_content:
             raise ValueError("System template not found for dom_manipulation")
 
-        # Render user prompt with context
         user_content = loader.render_template(
             "dom_manipulation",
             "user",
             user_prompt=user_prompt,
-            processed_html=context.processed_html,
+            skeleton=context.processed_html,
+            css_context=context.metadata.get("css_context", ""),
         )
         if not user_content:
             raise ValueError("User template not found for dom_manipulation")
@@ -124,93 +139,112 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
 
     async def parse_response(
         self, raw_response: str, context: ProcessedContext
-    ) -> DOMManipulationResult:
-        """Parse and validate AI response."""
+    ) -> DOMPatchResult:
+        """Parse the JSON patch list returned by the model."""
+        text = raw_response.strip()
+        # Defensive: tolerate ```json fences even though JSON mode is on.
+        if text.startswith("```"):
+            text = text.split("\n", 1)[-1]
+            if text.endswith("```"):
+                text = text[: text.rfind("```")]
+
         try:
-            data = json.loads(raw_response)
+            data = json.loads(text)
         except json.JSONDecodeError as e:
             raise MalformedResponseError(f"Invalid JSON: {e}")
 
-        # Validate against schema
         try:
-            result = DOMManipulationResult(**data)
+            return DOMPatchResult.model_validate(data)
         except Exception as e:
-            raise ValidationError(f"Response validation failed: {e}")
-
-        return result
+            raise ValidationError(f"Patch list validation failed: {e}")
 
     async def postprocess(
-        self, parsed: DOMManipulationResult, context: ProcessedContext
+        self, parsed: DOMPatchResult, context: ProcessedContext
     ) -> DOMManipulationResult:
+        """Resolve patches to live-DOM ops + a server-applied fallback.
+
+        Primary output is ``patches`` + ``css_vars``: the extension applies
+        these to the live, post-JS DOM in place (scripts/listeners/SPA state
+        preserved). ``modified_html`` is a lossy server-applied fallback for
+        non-JS consumers only.
         """
-        Apply safety checks and transformations.
-        
-        1. Validate selectors reference existing elements
-        2. Sanitize HTML in insert/replace operations
-        """
-        logger.info(f"Postprocessing {len(parsed.patches)} patch operations")
+        soup = context.metadata["soup"]
+        id_map = context.metadata["id_map"]
+        unique_ids = compute_unique_ids(soup)
 
-        # Sanitize HTML in operations
-        for patch in parsed.patches:
-            # Check insert operations
-            if hasattr(patch, "html"):
-                html_content = getattr(patch, "html")
-                if not self._is_safe_html(html_content):
-                    raise PostprocessError(
-                        f"Unsafe HTML detected in {patch.op} operation: {html_content[:100]}"
-                    )
+        ops: list[dict] = []
+        css_vars: dict[str, str] = {}
+        css_rules: list[str] = []
+        skipped: list[str] = []
 
-            # Check wrapper HTML
-            if hasattr(patch, "wrapper_html"):
-                wrapper = getattr(patch, "wrapper_html", None)
-                if wrapper and not self._is_safe_html(wrapper):
-                    raise PostprocessError(
-                        f"Unsafe HTML detected in wrapper: {wrapper[:100]}"
-                    )
+        # Resolve selectors BEFORE apply_patches mutates/strips the soup.
+        for i, patch in enumerate(parsed.patches):
+            op = patch.op
+            if op == "set_css_var":
+                name = patch.name if patch.name.startswith("--") else f"--{patch.name}"
+                css_vars[name] = patch.value
+                continue
+            if op == "add_css_rule":
+                if patch.css.strip():
+                    css_rules.append(patch.css.strip())
+                continue
 
-            # Validate selectors reference existing elements
-            if hasattr(patch, "selector"):
-                selector = getattr(patch, "selector")
-                if not self._validate_selector(selector, context.element_id_map):
-                    logger.warning(f"Selector may not exist: {selector}")
+            tag = id_map.get(str(getattr(patch, "target", "")))
+            if tag is None:
+                skipped.append(f"{op} @{getattr(patch,'target','?')}: unknown anchor")
+                continue
+            if op in _DESTRUCTIVE and tag.name in _PROTECTED:
+                skipped.append(f"{op} @{patch.target}: refused on <{tag.name}>")
+                continue
 
-            if hasattr(patch, "target_selector"):
-                target = getattr(patch, "target_selector")
-                if not self._validate_selector(target, context.element_id_map):
-                    logger.warning(f"Target selector may not exist: {target}")
+            entry: dict = {
+                "id": f"p{i}",
+                "op": op,
+                "s": robust_selector(tag, unique_ids),
+                "h": element_hint(tag),
+            }
+            for field in ("text", "name", "value", "style", "class_name",
+                          "html", "position"):
+                if hasattr(patch, field):
+                    entry[field] = getattr(patch, field)
+            if op == "move":
+                dest = id_map.get(str(patch.to))
+                if dest is None:
+                    skipped.append(f"move @{patch.target}: unknown dest @{patch.to}")
+                    continue
+                entry["t"] = robust_selector(dest, unique_ids)
+            ops.append(entry)
 
-        logger.info("Postprocessing complete")
-        return parsed
+        # Optional lossy fallback for non-JS consumers. OFF by default: the
+        # extension applies `patches` to the live DOM and never reads this,
+        # while building it runs a slow reserialize and bloats the response
+        # enough to stall the extension's offscreen->worker message on big
+        # pages (job stuck on "processing").
+        if settings.dom_emit_server_html:
+            modified_html, _, _ = apply_patches(soup, id_map, parsed.patches)
+        else:
+            modified_html = ""
 
-    def _is_safe_html(self, html: str) -> bool:
-        """Check if HTML is safe (no scripts, event handlers, etc.)."""
-        html_lower = html.lower()
+        applied = len(ops) + len(css_vars) + len(css_rules)
+        summary = parsed.changes_summary or "Applied DOM patches."
+        if skipped:
+            summary += f" ({applied} applied, {len(skipped)} skipped)"
 
-        # Check for script tags
-        if "<script" in html_lower:
-            return False
+        logger.info(
+            f"Resolved {len(ops)} ops + {len(css_vars)} css vars + "
+            f"{len(css_rules)} css rules, {len(skipped)} skipped "
+            f"(live-DOM patch response)"
+        )
 
-        # Check for event handlers
-        if re.search(r'\bon\w+\s*=', html_lower):
-            return False
-
-        # Check for javascript: URLs
-        if "javascript:" in html_lower:
-            return False
-
-        # Check for iframes (could be more sophisticated)
-        if "<iframe" in html_lower:
-            return False
-
-        return True
-
-    def _validate_selector(self, selector: str, element_id_map: dict[str, str]) -> bool:
-        """Validate that a selector references an existing element ID."""
-        # Extract element ID from selector like [data-element-id='e5']
-        match = re.search(r"data-element-id=['\"](\w+)['\"]", selector)
-        if match:
-            element_id = match.group(1)
-            return element_id in element_id_map
-        return True  # If not using our ID format, assume it's valid
+        return DOMManipulationResult(
+            patches=ops,
+            css_vars=css_vars,
+            css_rules=css_rules,
+            skipped=skipped,
+            modified_html=modified_html,
+            changes_summary=summary,
+            original_size=context.original_size,
+            modified_size=len(modified_html),
+        )
 
 # Made with Bob

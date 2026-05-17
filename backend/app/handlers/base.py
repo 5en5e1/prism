@@ -12,8 +12,11 @@ class ModelConfig:
 
     model: str
     temperature: float
-    max_tokens: int
+    max_completion_tokens: int  # Changed from max_tokens for GPT-5 compatibility
     response_format: str | None = None  # "json_schema" for structured outputs
+    # Reasoning-model effort: "minimal" | "low" | "medium" | "high".
+    # Lower = far fewer reasoning tokens. Ignored by non-reasoning models.
+    reasoning_effort: str | None = None
 
 
 @dataclass

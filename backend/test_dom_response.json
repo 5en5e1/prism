@@ -1,30 +1,24 @@
 {
-  "trace_id": "7649466d-a703-47c6-ba36-75da9c66a4f5",
+  "trace_id": "5b7e2907-c993-4aba-8891-4afdfad5b0b2",
   "use_case": "dom_manipulation",
   "status": "ok",
   "result": {
-    "patches": [
-      {
-        "op": "move",
-        "selector": "[data-element-id='e28']",
-        "target_selector": "[data-element-id='e4']",
-        "position": "after"
-      }
-    ],
-    "element_count": 40,
-    "applied_skeletonization": false
+    "modified_html": "<!DOCTYPE html><html lang=\"en\"><head><meta charset=\"UTF-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\"><title>Sample Page for Testing</title><style> body { font-family: Arial, sans-serif; } .container { max-width: 1200px; margin: 0 auto; } .sidebar { position: fixed; top: 20px; right: 20px; background-color: #f4f4f4; padding: 10px; border: 1px solid #ccc; z-index: 1000; } </style></head><body><div class=\"container\"><header><h1>Welcome to Test Site</h1><nav><ul><li><a href=\"/\">Home</a></li><li><a href=\"/about\">About</a></li><li><a href=\"/contact\">Contact</a></li></ul></nav></header><main><section class=\"hero\"><h2>Hero Section</h2><p>This is a sample hero section with some content.</p></section><section class=\"articles\"><article class=\"post\"><h3>First Article</h3><p>This is the content of the first article. It contains some text that describes the article topic.</p></article><article class=\"post\"><h3>Second Article</h3><p>This is the content of the second article. It also contains descriptive text about its topic.</p></article><article class=\"post featured\"><h3>Featured Article</h3><p>This is a featured article with special styling and prominence on the page.</p></article></section></main><aside class=\"sidebar\"><h4>Sidebar</h4><ul><li>Link 1</li><li>Link 2</li><li>Link 3</li></ul></aside><footer><p>&copy; 2024 Test Site. All rights reserved.</p><div class=\"social\"><a href=\"#\">Twitter</a><a href=\"#\">Facebook</a><a href=\"#\">LinkedIn</a></div></footer></div><script> // This script should be removed during cleaning console.log('Test script'); </script></body></html>",
+    "changes_summary": "Moved the sidebar to the top right corner of the page using fixed positioning. Added a background color and border to the sidebar for better visibility.",
+    "original_size": 2299,
+    "modified_size": 1612
   },
   "warnings": [],
   "usage": {
-    "input_tokens": 1475,
-    "output_tokens": 73,
+    "input_tokens": 1258,
+    "output_tokens": 516,
     "model": "gpt-4o"
   },
   "timing_ms": {
-    "preprocess_ms": 3.2702919997973368,
-    "ai_ms": 2510.304676998203,
-    "postprocess_ms": 0.20743999994010665,
-    "total_ms": 2513.7824089979404
+    "preprocess_ms": 0.40392100027020206,
+    "ai_ms": 6102.420141000039,
+    "postprocess_ms": 2.032398000210378,
+    "total_ms": 6104.856460000519
   },
   "error": null
 }

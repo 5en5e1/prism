@@ -89,7 +89,7 @@ async def with_retry(
                 raise ContentFilterError(str(e))
 
             # For other API errors, retry if transient
-            if attempt < max_attempts - 1 and e.status_code in [500, 502, 503, 504]:
+            if attempt < max_attempts - 1 and getattr(e, "status_code", None) in [500, 502, 503, 504]:
                 delay = min(base_delay * (2**attempt) + random.uniform(0, 1), max_delay)
                 logger.warning(
                     f"Transient API error ({e.status_code}), retrying in {delay:.2f}s"

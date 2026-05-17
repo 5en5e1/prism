@@ -78,6 +78,35 @@ def clean_html(html: str, preserve_hidden: bool = False) -> str:
     return html_str.strip()
 
 
+def minimal_clean_html(html: str) -> str:
+    """
+    Minimal HTML cleaning for full-HTML editing mode.
+    
+    Only removes comments and collapses excessive whitespace.
+    Preserves all scripts, styles, hidden elements, and attributes.
+    
+    Args:
+        html: Raw HTML content
+        
+    Returns:
+        Minimally cleaned HTML string
+        
+    Raises:
+        HTMLParseError: If HTML cannot be parsed
+    """
+    try:
+        # Remove HTML comments
+        html_str = re.sub(r'<!--.*?-->', '', html, flags=re.DOTALL)
+        
+        # Collapse excessive whitespace (but preserve single spaces)
+        html_str = re.sub(r'\s+', ' ', html_str)
+        html_str = re.sub(r'>\s+<', '><', html_str)
+        
+        return html_str.strip()
+    except Exception as e:
+        raise HTMLParseError(f"Failed to clean HTML: {e}")
+
+
 def strip_large_text_nodes(soup: BeautifulSoup, max_length: int = 80) -> None:
     """
     Replace large text nodes with placeholders.

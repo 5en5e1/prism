@@ -1,23 +1,31 @@
 ## User Request
 
 {{ user_prompt }}
+{% if css_context %}
+## Styles (existing design system — keep edits consistent with this)
 
-## HTML Structure
+```css
+{{ css_context }}
+```
+{% endif %}
+## Page Skeleton
 
-The following HTML has been preprocessed and each element has been assigned a data-element-id attribute for reference:
+Each line is one element: `@<anchor id> <tag>.<class>#<domid> [style=… attrs] "text"`.
+Target elements by their `@id`. Unpatched elements (and their hidden
+descendants/styles/scripts) are preserved exactly.
 
-```html
-{{ processed_html }}
+```
+{{ skeleton }}
 ```
 
 ## Task
 
-Analyze the HTML structure and generate patch operations to fulfill the user's request: "{{ user_prompt }}"
+Produce the minimal set of patch operations that fulfills the request:
+"{{ user_prompt }}"
 
-Remember:
-- Only reference elements by their data-element-id attributes
-- Generate safe HTML (no scripts, no event handlers)
-- Be precise and minimal in your changes
-- Consider operation order and dependencies
+- Prefer `set_text`/`set_attr`/`set_style`/`add_class` over `replace_*`.
+- `set_style` merges — only specify properties you want to change.
+- Reuse existing classes / CSS variables for visual consistency.
 
-Respond with valid JSON following the schema provided in the system prompt.
+Return ONLY the JSON object described in the system prompt
+(`patches` + `changes_summary`). Do not return full page HTML.

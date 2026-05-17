@@ -1,4 +1,5 @@
 """QA handler (stub for future implementation)."""
+from ..config import settings
 from ..core.registry import register_handler
 from ..handlers.base import Handler, Message, ModelConfig, ProcessedContext
 from ..schemas.qa import QAParams, QARequest, QAResult
@@ -23,9 +24,9 @@ class QAHandler(Handler[QARequest, QAResult]):
     @property
     def model_config(self) -> ModelConfig:
         return ModelConfig(
-            model="gpt-4o",
+            model=settings.openai_default_model,
             temperature=0.3,
-            max_tokens=2000,
+            max_completion_tokens=2000,
             response_format="json_schema",
         )
 
