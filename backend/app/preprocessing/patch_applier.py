@@ -85,9 +85,9 @@ def _set_css_vars(soup: BeautifulSoup, vars_map: dict[str, str]) -> None:
         head = soup.new_tag("head")
         if isinstance(html, Tag):
             html.insert(0, head)
-    style = soup.find("style", id="bob-overrides")
+    style = soup.find("style", id="prism-overrides")
     if style is None:
-        style = soup.new_tag("style", id="bob-overrides")
+        style = soup.new_tag("style", id="prism-overrides")
         head.append(style)
     decls = "".join(f"{k}:{v} !important;" for k, v in vars_map.items())
     style.string = f":root{{{decls}}}"

@@ -1,9 +1,9 @@
-(function bootDomPatchAssistant() {
-  if (window.__domPatchAssistantLoaded) {
+(function bootPrism() {
+  if (window.__prismExtensionLoaded) {
     return;
   }
 
-  window.__domPatchAssistantLoaded = true;
+  window.__prismExtensionLoaded = true;
 
   const HTML_CACHE_KEY = "domHtmlCache";
   const MAX_CAPTURED_HTML_CHARS = 2_000_000;
@@ -163,7 +163,7 @@
   }
 
   function marked(opId) {
-    return !!document.querySelector(`[data-bob-op="${opId}"]`);
+    return !!document.querySelector(`[data-prism-op="${opId}"]`);
   }
 
   function applyOp(op) {
@@ -198,14 +198,14 @@
       case "replace_element": {
         if (marked(op.id)) break;
         const f = fragment(op.html);
-        if (f.firstElementChild) f.firstElementChild.setAttribute("data-bob-op", op.id);
+        if (f.firstElementChild) f.firstElementChild.setAttribute("data-prism-op", op.id);
         if (el.parentNode) el.parentNode.replaceChild(f, el);
         break;
       }
       case "insert": {
         if (marked(op.id)) break;
         const f = fragment(op.html);
-        if (f.firstElementChild) f.firstElementChild.setAttribute("data-bob-op", op.id);
+        if (f.firstElementChild) f.firstElementChild.setAttribute("data-prism-op", op.id);
         if (op.position === "before") el.parentNode.insertBefore(f, el);
         else if (op.position === "after") el.parentNode.insertBefore(f, el.nextSibling);
         else if (op.position === "prepend") el.insertBefore(f, el.firstChild);
@@ -221,7 +221,7 @@
           dest = null;
         }
         if (!dest) break;
-        el.setAttribute("data-bob-op", op.id);
+        el.setAttribute("data-prism-op", op.id);
         if (op.position === "before") dest.parentNode.insertBefore(el, dest);
         else if (op.position === "after") dest.parentNode.insertBefore(el, dest.nextSibling);
         else if (op.position === "prepend") dest.insertBefore(el, dest.firstChild);
@@ -241,10 +241,10 @@
     const keys = Object.keys(cssVars || {});
     const rules = Array.isArray(cssRules) ? cssRules : [];
     if (!keys.length && !rules.length) return;
-    let style = document.getElementById("bob-overrides");
+    let style = document.getElementById("prism-overrides");
     if (!style) {
       style = document.createElement("style");
-      style.id = "bob-overrides";
+      style.id = "prism-overrides";
       (document.head || document.documentElement).appendChild(style);
     }
     let css = "";

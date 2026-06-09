@@ -77,8 +77,8 @@ def create_app() -> FastAPI:
     setup_logging()
 
     app = FastAPI(
-        title="HTML Manipulation API",
-        description="AI-powered HTML manipulation backend",
+        title="Prism API",
+        description="Backend API for Prism page transformations",
         version="0.1.0",
         lifespan=lifespan,
     )

@@ -57,8 +57,8 @@ _RUNTIME = r"""
     el.setAttribute("style", out.map(function(p){return p[0]+": "+p[1];}).join("; ") + (out.length?";":""));
   }
   function frag(html){ var tpl=document.createElement("template"); tpl.innerHTML=html; return tpl.content; }
-  function mark(node, id){ if(node && node.setAttribute) node.setAttribute("data-bob-op", id); }
-  function done(id){ return !!document.querySelector('[data-bob-op="'+id+'"]'); }
+  function mark(node, id){ if(node && node.setAttribute) node.setAttribute("data-prism-op", id); }
+  function done(id){ return !!document.querySelector('[data-prism-op="'+id+'"]'); }
 
   function applyOp(op){
     if (op.op === "set_css_var") return;
@@ -105,8 +105,8 @@ _RUNTIME = r"""
 
   function ensureVars(){
     var v = P.cssVars || {}, keys = Object.keys(v); if (!keys.length) return;
-    var s = document.getElementById("bob-overrides");
-    if (!s){ s = document.createElement("style"); s.id = "bob-overrides";
+    var s = document.getElementById("prism-overrides");
+    if (!s){ s = document.createElement("style"); s.id = "prism-overrides";
       (document.head || document.documentElement).appendChild(s); }
     var d = keys.map(function(k){ var n = k.indexOf("--")===0 ? k : "--"+k; return n+":"+v[k]+" !important;"; }).join("");
     var css = ":root{"+d+"}";
@@ -149,7 +149,7 @@ def build_patch_script(ops: list[dict], css_vars: dict[str, str]) -> str:
         separators=(",", ":"),
     ).replace("</", "<\\/")
     body = _RUNTIME.replace("__PAYLOAD__", payload)
-    return f'<script id="bob-patch" data-bob-runtime="1">{body}</script>'
+    return f'<script id="prism-patch" data-prism-runtime="1">{body}</script>'
 
 
 def inject_script(html: str, script: str) -> str:

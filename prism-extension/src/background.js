@@ -366,7 +366,7 @@ async function startProcessJob(payload) {
   } catch (error) {
     await takePendingJob(requestId);
     await setJobStatus("error", error.message || "Could not start the request.", { pageUrl });
-    notify("DOM Patch Assistant — failed", error.message || "Could not start the request.");
+    notify("Prism failed", error.message || "Could not start the request.");
     stopKeepAlive();
     await closeOffscreenIfIdle();
     throw error;
@@ -461,11 +461,11 @@ async function finalizeJob(message) {
 
     const partialNote = data.status === "partial" ? " (partial result)" : "";
     await setJobStatus("done", `Done${partialNote}. ${changesSummary}`.trim(), { pageUrl });
-    notify("DOM Patch Assistant — done", `${changesSummary || "Changes applied."} ${pageUrl}`);
+    notify("Prism done", `${changesSummary || "Changes applied."} ${pageUrl}`);
   } catch (error) {
     const errorMessage = error.message || "Processing failed.";
     await setJobStatus("error", errorMessage, { pageUrl });
-    notify("DOM Patch Assistant — failed", errorMessage);
+    notify("Prism failed", errorMessage);
   } finally {
     stopKeepAlive();
     await closeOffscreenIfIdle();

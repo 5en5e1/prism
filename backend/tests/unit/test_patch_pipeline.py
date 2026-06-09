@@ -243,7 +243,7 @@ def test_set_css_var_themes_without_touching_style():
         ],
     )
     assert applied == 2 and skipped == []
-    assert 'id="bob-overrides"' in out
+    assert 'id="prism-overrides"' in out
     assert "--bg:#1a0b14 !important" in out
     assert "--accent:#ff4fa3 !important" in out
     # original stylesheet untouched

@@ -600,21 +600,7 @@ async function rollbackVersion(versionId) {
     throw new Error("This version is not ready yet.");
   }
 
-  const response = await sendRuntimeMessage(
-    {
-      type: "ROLLBACK_TO_VERSION",
-      payload: {
-        tabId: activeTab.id,
-        pageUrl: activeTab.url,
-        version: selected
-      }
-    },
-    7000
-  );
-
-  if (!response?.ok) {
-    throw new Error(response?.error?.message || "Could not roll back page.");
-  }
+  const previousState = normalizeTabState(JSON.parse(JSON.stringify(currentTabState)));
 
   const remaining = currentTabState.history.filter((version) => version.id !== versionId);
   const history = currentTabState.current ? [currentTabState.current, ...remaining] : remaining;
@@ -624,6 +610,26 @@ async function rollbackVersion(versionId) {
   currentTabState = renumberVersionIndexes(currentTabState);
   renderCacheState();
   await persistTabState();
+
+  const tab = activeTab || (await getActiveTab());
+  const response = await sendRuntimeMessage(
+    {
+      type: "ROLLBACK_TO_VERSION",
+      payload: {
+        tabId: tab.id,
+        pageUrl: tab.url,
+        version: selected
+      }
+    },
+    7000
+  );
+
+  if (!response?.ok) {
+    currentTabState = previousState;
+    renderCacheState();
+    await persistTabState();
+    throw new Error(response?.error?.message || "Could not roll back page.");
+  }
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
