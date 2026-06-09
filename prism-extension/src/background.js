@@ -11,6 +11,7 @@ const PENDING_JOBS_KEY = "pendingJobs";
 const POPUP_TAB_STATE_KEY = "popupTabPromptState";
 const MAX_CACHED_PAGES = 20;
 const OFFSCREEN_PATH = "offscreen.html";
+const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
 
 // MV3 terminates an idle service worker after ~30s. A long fetch that is not
 // bound to an unanswered message event does NOT keep it alive on its own, so
@@ -113,9 +114,33 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   return false;
 });
 
+function semanticQuery(search) {
+  const params = new URLSearchParams(search || "");
+  const kept = [];
+  params.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (TRACKING_QUERY_NAMES.has(lower) || lower.startsWith("utm_")) {
+      return;
+    }
+    kept.push([key, value]);
+  });
+  kept.sort((a, b) => `${a[0]}=${a[1]}`.localeCompare(`${b[0]}=${b[1]}`));
+  return new URLSearchParams(kept).toString();
+}
+
+function routeHash(hash) {
+  const value = (hash || "").replace(/^#/, "");
+  return value.startsWith("/") || value.startsWith("!") ? value : "";
+}
+
 function getPageKey(url) {
   const parsedUrl = new URL(url);
-  return `${parsedUrl.origin}${parsedUrl.pathname}`;
+  const query = semanticQuery(parsedUrl.search);
+  const hashRoute = routeHash(parsedUrl.hash);
+  let routeKey = parsedUrl.pathname || "/";
+  if (query) routeKey += `?${query}`;
+  if (hashRoute) routeKey += `#${hashRoute}`;
+  return `${parsedUrl.origin}${routeKey}`;
 }
 
 async function setJobStatus(state, message, extra = {}) {
@@ -215,7 +240,10 @@ function resultToCacheEntry(versionResult, version = {}) {
     sourcePrompt: version.prompt || "",
     selectedMode: version.mode || null,
     changesSummary: versionResult?.changesSummary || "",
-    traceId: versionResult?.traceId || ""
+    traceId: versionResult?.traceId || "",
+    pageIdentity: versionResult?.pageIdentity || {},
+    pageSnapshot: versionResult?.pageSnapshot || {},
+    editRecords: versionResult?.editRecords || []
   };
 }
 
@@ -392,7 +420,9 @@ async function startProcessJob(payload) {
     params: payload.params || {},
     client_metadata: {
       extension_version: chrome.runtime.getManifest().version,
-      trace_id: traceId
+      trace_id: traceId,
+      page_identity: payload.pageIdentity || null,
+      page_snapshot: payload.pageSnapshot || null
     }
   });
 
@@ -491,7 +521,10 @@ async function finalizeJob(message) {
       sourcePrompt: userPrompt,
       selectedMode,
       changesSummary,
-      traceId: data.trace_id || ""
+      traceId: data.trace_id || "",
+      pageIdentity: data.result?.page_identity || {},
+      pageSnapshot: data.result?.snapshot || {},
+      editRecords: data.result?.edit_records || []
     };
 
     await cachePageResult(pageUrl, versionResult);

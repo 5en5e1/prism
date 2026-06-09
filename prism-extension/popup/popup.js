@@ -19,6 +19,7 @@ const TOKEN_LIMIT = 1000000;
 const CHARS_PER_TOKEN = 4;
 const HTML_CACHE_KEY = "domHtmlCache";
 const POPUP_TAB_STATE_KEY = "popupTabPromptState";
+const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
 // Modes are owned by the backend. We fetch [{key,label}] and render buttons;
 // the chosen key is sent and the backend resolves its instruction. No
 // instruction text lives here. `modeButtons` is populated by renderModes().
@@ -143,9 +144,59 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
-function getPageKey(url) {
+function stableHash(input) {
+  let hash = 2166136261;
+  const text = String(input || "");
+  for (let i = 0; i < text.length; i += 1) {
+    hash ^= text.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(16).padStart(8, "0");
+}
+
+function semanticQuery(search) {
+  const params = new URLSearchParams(search || "");
+  const kept = [];
+  params.forEach((value, key) => {
+    const lower = key.toLowerCase();
+    if (TRACKING_QUERY_NAMES.has(lower) || lower.startsWith("utm_")) {
+      return;
+    }
+    kept.push([key, value]);
+  });
+  kept.sort((a, b) => `${a[0]}=${a[1]}`.localeCompare(`${b[0]}=${b[1]}`));
+  return new URLSearchParams(kept).toString();
+}
+
+function routeHash(hash) {
+  const value = (hash || "").replace(/^#/, "");
+  return value.startsWith("/") || value.startsWith("!") ? value : "";
+}
+
+function getPageIdentity(url) {
   const parsedUrl = new URL(url);
-  return `${parsedUrl.origin}${parsedUrl.pathname}`;
+  const query = semanticQuery(parsedUrl.search);
+  const hashRoute = routeHash(parsedUrl.hash);
+  let routeKey = parsedUrl.pathname || "/";
+  if (query) routeKey += `?${query}`;
+  if (hashRoute) routeKey += `#${hashRoute}`;
+  const canonicalUrl = `${parsedUrl.origin}${routeKey}`;
+  return {
+    pageId: stableHash(`${parsedUrl.origin}|${routeKey}`),
+    websiteId: stableHash(parsedUrl.origin),
+    origin: parsedUrl.origin,
+    path: parsedUrl.pathname || "/",
+    routeKey,
+    canonicalUrl,
+    queryPolicy: "semantic",
+    hashPolicy: "route-only",
+    viewportVariant: "default",
+    authVariant: "unknown"
+  };
+}
+
+function getPageKey(url) {
+  return getPageIdentity(url).canonicalUrl;
 }
 
 function getSiteKey(url) {
@@ -742,7 +793,10 @@ function createGeneratedVersionFromCache(pageEntry) {
       changesSummary: pageEntry.changesSummary || "Cached page output",
       sourcePrompt: pageEntry.sourcePrompt || "",
       selectedMode: normalizeMode(pageEntry.selectedMode),
-      traceId: pageEntry.traceId || ""
+      traceId: pageEntry.traceId || "",
+      pageIdentity: pageEntry.pageIdentity || {},
+      pageSnapshot: pageEntry.pageSnapshot || {},
+      editRecords: pageEntry.editRecords || []
     },
     pending: false
   };
@@ -972,6 +1026,8 @@ async function rollbackVersion(versionId) {
         tabId: tab.id,
         pageUrl: snapshot.pageUrl,
         html: snapshot.html,
+        pageIdentity: snapshot.pageIdentity || getPageIdentity(snapshot.pageUrl),
+        pageSnapshot: snapshot.pageSnapshot || null,
         promptVersionId: newVersionId,
         tabStateKey: activeTabKey,
         user_prompt: selected.prompt,
@@ -1132,6 +1188,8 @@ applyPrompt.addEventListener("click", async () => {
           tabId: tab.id,
           pageUrl: snapshot.pageUrl,
           html: snapshot.html,
+          pageIdentity: snapshot.pageIdentity || getPageIdentity(snapshot.pageUrl),
+          pageSnapshot: snapshot.pageSnapshot || null,
           promptVersionId: versionId,
           tabStateKey: activeTabKey,
           user_prompt: userPrompt,

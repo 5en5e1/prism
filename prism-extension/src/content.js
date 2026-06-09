@@ -9,6 +9,9 @@
   const MAX_CAPTURED_HTML_CHARS = 2_000_000;
   const CHARS_PER_TOKEN = 4;
   const MAX_CACHED_PAGES = 20;
+  const NAVIGATION_POLL_MS = 500;
+  const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
+  let browserSession = createBrowserSessionState();
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     if (message?.type === "CAPTURE_PAGE_HTML") {
@@ -51,9 +54,74 @@
     chrome.runtime.sendMessage({ type: "PING_EXTENSION" });
   })();
 
-  function getPageKey(url = window.location.href) {
+  function stableHash(input) {
+    let hash = 2166136261;
+    const text = String(input || "");
+    for (let i = 0; i < text.length; i += 1) {
+      hash ^= text.charCodeAt(i);
+      hash = Math.imul(hash, 16777619);
+    }
+    return (hash >>> 0).toString(16).padStart(8, "0");
+  }
+
+  function semanticQuery(search) {
+    const params = new URLSearchParams(search || "");
+    const kept = [];
+    params.forEach((value, key) => {
+      const lower = key.toLowerCase();
+      if (TRACKING_QUERY_NAMES.has(lower) || lower.startsWith("utm_")) {
+        return;
+      }
+      kept.push([key, value]);
+    });
+    kept.sort((a, b) => `${a[0]}=${a[1]}`.localeCompare(`${b[0]}=${b[1]}`));
+    return new URLSearchParams(kept).toString();
+  }
+
+  function routeHash(hash) {
+    const value = (hash || "").replace(/^#/, "");
+    return value.startsWith("/") || value.startsWith("!") ? value : "";
+  }
+
+  function getPageIdentity(url = window.location.href) {
     const parsedUrl = new URL(url);
-    return `${parsedUrl.origin}${parsedUrl.pathname}`;
+    const query = semanticQuery(parsedUrl.search);
+    const hashRoute = routeHash(parsedUrl.hash);
+    let routeKey = parsedUrl.pathname || "/";
+    if (query) routeKey += `?${query}`;
+    if (hashRoute) routeKey += `#${hashRoute}`;
+    const canonicalUrl = `${parsedUrl.origin}${routeKey}`;
+    const viewportVariant = `${window.innerWidth}x${window.innerHeight}@${window.devicePixelRatio || 1}`;
+    const authVariant = document.cookie ? "possibly-authenticated" : "unknown";
+    const websiteId = stableHash(parsedUrl.origin);
+    const pageId = stableHash(`${parsedUrl.origin}|${routeKey}|${viewportVariant}|${authVariant}`);
+    return {
+      pageId,
+      websiteId,
+      origin: parsedUrl.origin,
+      path: parsedUrl.pathname || "/",
+      routeKey,
+      canonicalUrl,
+      queryPolicy: "semantic",
+      hashPolicy: "route-only",
+      viewportVariant,
+      authVariant
+    };
+  }
+
+  function getPageKey(url = window.location.href) {
+    return getPageIdentity(url).canonicalUrl;
+  }
+
+  function createBrowserSessionState() {
+    const identity = getPageIdentity();
+    return {
+      currentUrl: window.location.href,
+      pageKey: identity.canonicalUrl,
+      routeKey: identity.routeKey,
+      navigationEpoch: 1,
+      liveDomValid: true
+    };
   }
 
   function estimateTokens(text) {
@@ -78,13 +146,88 @@
     return { html, elementCount, truncated };
   }
 
+  function collectElementSummary(limit = 250) {
+    const elements = [];
+    const nodes = document.querySelectorAll("body, body *");
+    for (let i = 0; i < nodes.length && elements.length < limit; i += 1) {
+      const el = nodes[i];
+      const rect = el.getBoundingClientRect();
+      if (!rect.width && !rect.height) continue;
+      const style = window.getComputedStyle(el);
+      elements.push({
+        tag: el.tagName.toLowerCase(),
+        id: el.id || "",
+        className: typeof el.className === "string" ? el.className.slice(0, 120) : "",
+        role: el.getAttribute("role") || "",
+        ariaLabel: el.getAttribute("aria-label") || "",
+        text: (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 120),
+        visible: style.visibility !== "hidden" && style.display !== "none" && Number(style.opacity) !== 0,
+        rect: {
+          x: Math.round(rect.x),
+          y: Math.round(rect.y),
+          width: Math.round(rect.width),
+          height: Math.round(rect.height)
+        },
+        computed: {
+          display: style.display,
+          position: style.position,
+          color: style.color,
+          backgroundColor: style.backgroundColor,
+          fontSize: style.fontSize
+        }
+      });
+    }
+    return elements;
+  }
+
+  function detectFrameworkMarkers() {
+    const root = document.documentElement;
+    return {
+      react: Boolean(document.querySelector("[data-reactroot], [data-reactid], #__next")),
+      vue: Boolean(document.querySelector("[data-v-app], [data-server-rendered]")),
+      astro: Boolean(document.querySelector("[data-astro-cid]")),
+      shopify: /Shopify/i.test(root.innerHTML.slice(0, 200000)),
+      wordpress: Boolean(document.querySelector('meta[name="generator"][content*="WordPress" i], body[class*="wp-"]'))
+    };
+  }
+
+  function createPageSnapshotMetadata(snapshot) {
+    return {
+      pageUrl: window.location.href,
+      pageIdentity: getPageIdentity(),
+      navigationEpoch: browserSession.navigationEpoch,
+      capturedAt: new Date().toISOString(),
+      title: document.title || "",
+      elementCount: snapshot.elementCount,
+      viewport: {
+        width: window.innerWidth,
+        height: window.innerHeight,
+        devicePixelRatio: window.devicePixelRatio || 1,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY
+      },
+      sources: [
+        "live_dom",
+        "computed_styles_layout",
+        "accessibility_semantics",
+        "visual_viewport",
+        "raw_html_archive"
+      ],
+      frameworkMarkers: detectFrameworkMarkers(),
+      elementSummary: collectElementSummary()
+    };
+  }
+
   async function handleCapturePageHtml() {
     const snapshot = createSnapshotHtml();
+    const pageIdentity = getPageIdentity();
     return {
       ...snapshot,
       estimatedTokens: estimateTokens(snapshot.html),
       pageUrl: window.location.href,
-      pageKey: getPageKey()
+      pageKey: pageIdentity.canonicalUrl,
+      pageIdentity,
+      pageSnapshot: createPageSnapshotMetadata(snapshot)
     };
   }
 
@@ -267,13 +410,20 @@
     }
   }
 
-  let patchState = { patches: [], cssVars: {}, cssRules: [] };
+  let patchState = { patches: [], cssVars: {}, cssRules: [], pageKey: getPageKey(), navigationEpoch: 0 };
   let applying = false;
   let observer = null;
   let debounceTimer = null;
 
   function applyAll() {
     if (applying) return;
+    if (patchState.pageKey && patchState.pageKey !== getPageKey()) {
+      handleNavigationMaybe();
+      if (patchState.pageKey && patchState.pageKey !== getPageKey()) {
+        resetRuntimePatchState();
+      }
+      return;
+    }
     applying = true;
     if (observer) observer.disconnect();
     try {
@@ -320,7 +470,9 @@
     patchState = {
       patches: Array.isArray(patches) ? patches : [],
       cssVars: cssVars || {},
-      cssRules: Array.isArray(cssRules) ? cssRules : []
+      cssRules: Array.isArray(cssRules) ? cssRules : [],
+      pageKey: getPageKey(),
+      navigationEpoch: browserSession.navigationEpoch
     };
     startPersistence();
     applyAll();
@@ -356,6 +508,10 @@
   }
 
   async function handleApplyPatches(message) {
+    if (message.pageKey && message.pageKey !== getPageKey()) {
+      return { ok: false, stale: true, expectedPageKey: getPageKey(), receivedPageKey: message.pageKey };
+    }
+
     if (message.modifiedHtml) {
       applyModifiedHtml(message.modifiedHtml);
     } else {
@@ -376,6 +532,9 @@
         sourcePrompt: message.sourcePrompt || "",
         changesSummary: message.changesSummary || "",
         traceId: message.traceId || "",
+        pageIdentity: message.pageIdentity || getPageIdentity(),
+        pageSnapshot: message.pageSnapshot || null,
+        editRecords: message.editRecords || [],
         pageUrl: window.location.href
       });
       return { ok: true, cached: true };
@@ -417,6 +576,9 @@
       sourcePrompt: entry.sourcePrompt,
       changesSummary: entry.changesSummary,
       traceId: entry.traceId,
+      pageIdentity: entry.pageIdentity || getPageIdentity(entry.pageUrl),
+      pageSnapshot: entry.pageSnapshot || null,
+      editRecords: entry.editRecords || [],
       pageUrl: entry.pageUrl,
       updatedAt: new Date().toISOString()
     };
@@ -467,4 +629,53 @@
       // A stale cache entry should never break the live page.
     }
   }
+
+  function resetRuntimePatchState() {
+    patchState = { patches: [], cssVars: {}, cssRules: [], pageKey: getPageKey(), navigationEpoch: browserSession.navigationEpoch };
+    if (observer) {
+      observer.disconnect();
+      observer = null;
+    }
+    clearTimeout(debounceTimer);
+    const style = document.getElementById("prism-overrides");
+    if (style) style.remove();
+  }
+
+  function handleNavigationMaybe() {
+    const identity = getPageIdentity();
+    if (identity.canonicalUrl === browserSession.pageKey) {
+      return;
+    }
+    browserSession = {
+      currentUrl: window.location.href,
+      pageKey: identity.canonicalUrl,
+      routeKey: identity.routeKey,
+      navigationEpoch: browserSession.navigationEpoch + 1,
+      liveDomValid: false
+    };
+    resetRuntimePatchState();
+    window.setTimeout(() => {
+      browserSession.liveDomValid = true;
+      applyCachedPatches();
+    }, 120);
+  }
+
+  function installNavigationInvalidation() {
+    const wrapHistory = (name) => {
+      const original = history[name];
+      history[name] = function wrappedHistoryState() {
+        const result = original.apply(this, arguments);
+        window.setTimeout(handleNavigationMaybe, 0);
+        return result;
+      };
+    };
+    wrapHistory("pushState");
+    wrapHistory("replaceState");
+    window.addEventListener("popstate", handleNavigationMaybe);
+    window.addEventListener("hashchange", handleNavigationMaybe);
+    window.addEventListener("pageshow", handleNavigationMaybe);
+    window.setInterval(handleNavigationMaybe, NAVIGATION_POLL_MS);
+  }
+
+  installNavigationInvalidation();
 })();
