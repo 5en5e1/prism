@@ -648,9 +648,11 @@
     }
   }
 
-  let selectionState = { active: false, reference: "", hovered: null };
+  let selectionState = { active: false, reference: "", hovered: null, pending: false };
   let selectionHighlight = null;
   let selectionStyles = null;
+  let selectionObserver = null;
+  let selectionRefreshTimer = null;
   const selectionMarkers = new Map();
 
   function cssEscape(value) {
@@ -785,10 +787,17 @@
   }
 
   function setOverlayRect(overlay, rect) {
-    overlay.style.left = `${Math.max(0, Math.round(rect.left))}px`;
-    overlay.style.top = `${Math.max(0, Math.round(rect.top))}px`;
-    overlay.style.width = `${Math.round(rect.width)}px`;
-    overlay.style.height = `${Math.round(rect.height)}px`;
+    const next = {
+      left: `${Math.max(0, Math.round(rect.left))}px`,
+      top: `${Math.max(0, Math.round(rect.top))}px`,
+      width: `${Math.round(rect.width)}px`,
+      height: `${Math.round(rect.height)}px`
+    };
+    Object.entries(next).forEach(([property, value]) => {
+      if (overlay.style[property] !== value) {
+        overlay.style[property] = value;
+      }
+    });
   }
 
   function updateSelectionHighlight(el) {
@@ -940,7 +949,47 @@
     };
   }
 
-  function placeSelectedMarker(reference, el) {
+  function selectedElementFingerprint(el) {
+    const rect = el.getBoundingClientRect();
+    const classes = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter(Boolean) : [];
+    const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    return stableHash(`${el.tagName}|${el.id}|${classes.join(".")}|${text}|${Math.round(rect.width)}x${Math.round(rect.height)}`);
+  }
+
+  function replacementScore(el, record) {
+    let score = 0;
+    if (record.fingerprint && selectedElementFingerprint(el) === record.fingerprint) score += 100;
+    if (record.id && el.id === record.id) score += 40;
+    if (record.tagName && el.tagName.toLowerCase() === record.tagName) score += 20;
+    const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    if (record.visibleText && text === record.visibleText) score += 30;
+    return score;
+  }
+
+  function findReplacementElement(record) {
+    if (!record || !Array.isArray(record.selectorCandidates)) {
+      return null;
+    }
+
+    const matches = [];
+    record.selectorCandidates.forEach((selector) => {
+      try {
+        document.querySelectorAll(selector).forEach((candidate) => {
+          if (!isPrismSelectionUi(candidate) && rectIsUsable(candidate.getBoundingClientRect())) {
+            matches.push(candidate);
+          }
+        });
+      } catch (_error) {
+        // Ignore stale or invalid selector candidates.
+      }
+    });
+
+    return [...new Set(matches)]
+      .map((candidate) => ({ candidate, score: replacementScore(candidate, record) }))
+      .sort((a, b) => b.score - a.score)[0]?.candidate || null;
+  }
+
+  function placeSelectedMarker(reference, el, record = null) {
     ensureSelectionStyles();
     let marker = selectionMarkers.get(reference)?.marker;
     if (!marker) {
@@ -950,18 +999,67 @@
       document.documentElement.appendChild(marker);
     }
     setOverlayRect(marker, el.getBoundingClientRect());
-    selectionMarkers.set(reference, { el, marker });
+    selectionMarkers.set(reference, { el, marker, record });
+    ensureSelectionObserver();
   }
 
   function refreshSelectedMarkers() {
-    selectionMarkers.forEach(({ el, marker }) => {
+    selectionMarkers.forEach(({ el, marker, record }, reference) => {
       if (!document.documentElement.contains(el)) {
-        marker.remove();
-        selectionMarkers.delete(marker.dataset.prismReference);
-        return;
+        const replacement = findReplacementElement(record);
+        if (!replacement) {
+          marker.hidden = true;
+          return;
+        }
+        el = replacement;
+        marker.hidden = false;
+        selectionMarkers.set(reference, { el, marker, record });
       }
-      setOverlayRect(marker, el.getBoundingClientRect());
+      const rect = el.getBoundingClientRect();
+      marker.hidden = !rectIsUsable(rect);
+      if (!marker.hidden) {
+        setOverlayRect(marker, rect);
+      }
     });
+  }
+
+  function refreshSelectionUi() {
+    if (selectionState.active) {
+      updateSelectionHighlight(selectionState.hovered);
+    }
+    refreshSelectedMarkers();
+  }
+
+  function scheduleSelectionRefresh() {
+    window.clearTimeout(selectionRefreshTimer);
+    selectionRefreshTimer = window.setTimeout(refreshSelectionUi, 50);
+  }
+
+  function ensureSelectionObserver() {
+    if (selectionObserver || !document.documentElement) {
+      return;
+    }
+    selectionObserver = new MutationObserver((mutations) => {
+      const pageChanged = mutations.some((mutation) => !isPrismSelectionUi(mutation.target));
+      if (pageChanged) {
+        scheduleSelectionRefresh();
+      }
+    });
+    selectionObserver.observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      attributes: true
+    });
+  }
+
+  function stopSelectionObserverIfIdle() {
+    if (selectionState.active || selectionMarkers.size || !selectionObserver) {
+      return;
+    }
+    selectionObserver.disconnect();
+    selectionObserver = null;
+    window.clearTimeout(selectionRefreshTimer);
+    selectionRefreshTimer = null;
   }
 
   function forgetSelectedElement(reference) {
@@ -970,11 +1068,13 @@
       selected.marker.remove();
     }
     selectionMarkers.delete(reference);
+    stopSelectionObserverIfIdle();
   }
 
   function clearSelectedElementMarkers() {
     selectionMarkers.forEach(({ marker }) => marker.remove());
     selectionMarkers.clear();
+    stopSelectionObserverIfIdle();
   }
 
   function handleSelectionClick(event) {
@@ -982,17 +1082,31 @@
       return;
     }
     blockSelectionEvent(event);
+    if (selectionState.pending) {
+      return;
+    }
     const target = selectionState.hovered || nearestMeaningfulElement(event.composedPath?.()[0] || event.target);
     if (!target) {
       return;
     }
     const reference = selectionState.reference;
     const record = selectedElementRecord(target, reference);
-    placeSelectedMarker(reference, target);
-    stopElementSelection();
+    placeSelectedMarker(reference, target, record);
+    selectionState.pending = true;
     chrome.runtime.sendMessage({
       type: "ELEMENT_SELECTED",
       payload: { element: record }
+    }, (response) => {
+      selectionState.pending = false;
+      if (!selectionState.active) {
+        return;
+      }
+      if (chrome.runtime.lastError || response?.status === "error" || !response?.ok) {
+        stopElementSelection();
+        return;
+      }
+      selectionState.reference = response.nextReference || selectionState.reference;
+      updateSelectionHighlight(selectionState.hovered);
     });
   }
 
@@ -1006,8 +1120,9 @@
 
   function startElementSelection(reference) {
     stopElementSelection();
-    selectionState = { active: true, reference: reference || "element1", hovered: null };
+    selectionState = { active: true, reference: reference || "element1", hovered: null, pending: false };
     ensureSelectionHighlight();
+    ensureSelectionObserver();
     document.addEventListener("pointermove", handleSelectionPointerMove, true);
     document.addEventListener("pointerdown", blockSelectionEvent, true);
     document.addEventListener("mousedown", blockSelectionEvent, true);
@@ -1029,10 +1144,11 @@
     document.removeEventListener("dblclick", blockSelectionEvent, true);
     document.removeEventListener("auxclick", blockSelectionEvent, true);
     document.removeEventListener("keydown", handleSelectionKeydown, true);
-    selectionState = { active: false, reference: "", hovered: null };
+    selectionState = { active: false, reference: "", hovered: null, pending: false };
     if (selectionHighlight) {
       selectionHighlight.hidden = true;
     }
+    stopSelectionObserverIfIdle();
   }
 
   function resetRuntimePatchState() {

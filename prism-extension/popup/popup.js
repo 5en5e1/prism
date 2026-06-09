@@ -189,6 +189,19 @@ function createId() {
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
 }
 
+function nextElementReference(elements = []) {
+  const used = new Set(
+    elements
+      .map((element) => element?.reference)
+      .filter((reference) => typeof reference === "string")
+  );
+  let index = elements.length + 1;
+  while (used.has(`element${index}`)) {
+    index += 1;
+  }
+  return `element${index}`;
+}
+
 function stableHash(input) {
   let hash = 2166136261;
   const text = String(input || "");
@@ -836,6 +849,8 @@ async function removeSelectedReference(reference) {
   currentTabState.selectedElements = (currentTabState.selectedElements || []).filter(
     (element) => element.reference !== reference
   );
+  const nextReference = nextElementReference(currentTabState.selectedElements);
+  currentTabState.nextElementIndex = Number(nextReference.replace(/^element/, "")) || 1;
   removeReferenceFromPrompt(reference);
   renderSelectedElements();
   scheduleDraftSave();
@@ -851,7 +866,8 @@ async function beginElementSelection() {
   await ensureContentScript(tab);
   syncPromptDraftFromInput();
 
-  const nextReference = `element${currentTabState.nextElementIndex || 1}`;
+  const nextReference = nextElementReference(currentTabState.selectedElements || []);
+  currentTabState.nextElementIndex = Number(nextReference.replace(/^element/, "")) || 1;
   currentTabState.selectionMode = true;
   await persistTabState();
 
@@ -880,7 +896,7 @@ async function beginElementSelection() {
 
   startElementPick.hidden = true;
   cancelElementPick.hidden = false;
-  setComposerStatus("Hover the page, then click an element.", "ready");
+  setComposerStatus("Click elements on the page. Press Escape when done.", "ready");
 }
 
 async function cancelElementSelection() {

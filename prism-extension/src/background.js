@@ -206,6 +206,19 @@ function insertReferenceIntoText(text, reference, start, end) {
   };
 }
 
+function nextElementReference(elements = []) {
+  const used = new Set(
+    elements
+      .map((element) => element?.reference)
+      .filter((reference) => typeof reference === "string")
+  );
+  let index = elements.length + 1;
+  while (used.has(`element${index}`)) {
+    index += 1;
+  }
+  return `element${index}`;
+}
+
 function normalizePopupState(state = {}) {
   return {
     draftPrompt: "",
@@ -287,9 +300,6 @@ async function finishElementSelection(payload = {}, sender = {}) {
   if (!session) {
     throw new Error("No active element selection session.");
   }
-  delete sessions[String(tabId)];
-  await saveElementSelectionSessions(sessions);
-
   const record = {
     ...(payload.element || {}),
     reference: session.nextReference,
@@ -311,22 +321,29 @@ async function finishElementSelection(payload = {}, sender = {}) {
     ...existing.filter((element) => element.reference !== record.reference),
     record
   ];
+  const nextReference = nextElementReference(selectedElements);
 
   tabState[session.tabStateKey] = {
     ...state,
     draftPrompt: inserted.text,
     selectedElements,
-    nextElementIndex: Math.max(
-      Number(state.nextElementIndex) || 1,
-      selectedElements.length + 1
-    ),
+    nextElementIndex: Number(nextReference.replace(/^element/, "")) || selectedElements.length + 1,
     promptSelectionStart: inserted.cursor,
     promptSelectionEnd: inserted.cursor,
-    selectionMode: false
+    selectionMode: true
   };
 
+  sessions[String(tabId)] = {
+    ...session,
+    promptText: inserted.text,
+    selectionStart: inserted.cursor,
+    selectionEnd: inserted.cursor,
+    nextReference
+  };
+
+  await saveElementSelectionSessions(sessions);
   await chrome.storage.local.set({ [POPUP_TAB_STATE_KEY]: tabState });
-  return { ok: true, reference: record.reference };
+  return { ok: true, reference: record.reference, nextReference };
 }
 
 async function setJobStatus(state, message, extra = {}) {
