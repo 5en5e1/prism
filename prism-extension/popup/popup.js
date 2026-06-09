@@ -14,6 +14,9 @@ const detailText = document.querySelector("#detailText");
 const detailMode = document.querySelector("#detailMode");
 const openSettings = document.querySelector("#openSettings");
 const clearAllPopupCache = document.querySelector("#clearAllPopupCache");
+const startElementPick = document.querySelector("#startElementPick");
+const cancelElementPick = document.querySelector("#cancelElementPick");
+const selectedElementsList = document.querySelector("#selectedElementsList");
 
 const TOKEN_LIMIT = 1000000;
 const CHARS_PER_TOKEN = 4;
@@ -83,6 +86,7 @@ let selectedMode = null;
 let currentTabState = createEmptyTabState();
 let saveTimer = null;
 let statusTimer = null;
+let lastPromptEditAt = 0;
 
 function createEmptyTabState() {
   return {
@@ -91,7 +95,12 @@ function createEmptyTabState() {
     current: null,
     history: [],
     nextIndex: 1,
-    historyExpanded: false
+    historyExpanded: false,
+    selectedElements: [],
+    nextElementIndex: 1,
+    promptSelectionStart: 0,
+    promptSelectionEnd: 0,
+    selectionMode: false
   };
 }
 
@@ -103,8 +112,44 @@ function normalizeTabState(state = {}) {
     current: normalizeVersion(state.current),
     history: Array.isArray(state.history) ? state.history.map(normalizeVersion).filter(Boolean) : [],
     nextIndex: Number.isInteger(state.nextIndex) && state.nextIndex > 0 ? state.nextIndex : 1,
-    historyExpanded: Boolean(state.historyExpanded)
+    historyExpanded: Boolean(state.historyExpanded),
+    selectedElements: Array.isArray(state.selectedElements)
+      ? state.selectedElements.map(normalizeSelectedElement).filter(Boolean)
+      : [],
+    nextElementIndex: Number.isInteger(state.nextElementIndex) && state.nextElementIndex > 0
+      ? state.nextElementIndex
+      : 1,
+    promptSelectionStart: Number.isInteger(state.promptSelectionStart) ? state.promptSelectionStart : 0,
+    promptSelectionEnd: Number.isInteger(state.promptSelectionEnd) ? state.promptSelectionEnd : 0,
+    selectionMode: Boolean(state.selectionMode)
   }));
+}
+
+function normalizeSelectedElement(element) {
+  if (!element || typeof element !== "object" || !element.reference) {
+    return null;
+  }
+
+  return {
+    reference: String(element.reference),
+    pageUrl: element.pageUrl || "",
+    pageKey: element.pageKey || "",
+    selectorCandidates: Array.isArray(element.selectorCandidates) ? element.selectorCandidates : [],
+    domPath: Array.isArray(element.domPath) ? element.domPath : [],
+    visibleText: element.visibleText || "",
+    tagName: element.tagName || "",
+    id: element.id || "",
+    classes: Array.isArray(element.classes) ? element.classes : [],
+    dataAttributes: element.dataAttributes && typeof element.dataAttributes === "object"
+      ? element.dataAttributes
+      : {},
+    attributes: element.attributes && typeof element.attributes === "object" ? element.attributes : {},
+    boundingBox: element.boundingBox || {},
+    visualPosition: element.visualPosition || {},
+    semanticRole: element.semanticRole || "",
+    fingerprint: element.fingerprint || "",
+    selectedAt: element.selectedAt || new Date().toISOString()
+  };
 }
 
 function normalizeVersion(version) {
@@ -416,6 +461,49 @@ async function persistTabState() {
   await chrome.storage.local.set({ [POPUP_TAB_STATE_KEY]: store });
 }
 
+function setPromptValue(value, options = {}) {
+  const nextValue = typeof value === "string" ? value : "";
+  if (promptInput.value === nextValue) {
+    return;
+  }
+
+  const shouldFocus = options.focus || document.activeElement === promptInput;
+  const start = Number.isInteger(options.selectionStart)
+    ? options.selectionStart
+    : promptInput.selectionStart;
+  const end = Number.isInteger(options.selectionEnd)
+    ? options.selectionEnd
+    : promptInput.selectionEnd;
+  promptInput.value = nextValue;
+
+  if (shouldFocus) {
+    promptInput.focus();
+    const boundedStart = Math.min(Math.max(start || 0, 0), nextValue.length);
+    const boundedEnd = Math.min(Math.max(end || boundedStart, 0), nextValue.length);
+    promptInput.setSelectionRange(boundedStart, boundedEnd);
+  }
+}
+
+function rememberPromptSelection() {
+  currentTabState.promptSelectionStart = promptInput.selectionStart || 0;
+  currentTabState.promptSelectionEnd = promptInput.selectionEnd || currentTabState.promptSelectionStart;
+}
+
+function syncPromptDraftFromInput() {
+  rememberPromptSelection();
+  currentTabState.draftPrompt = promptInput.value;
+  currentTabState.draftMode = selectedMode;
+  lastPromptEditAt = Date.now();
+}
+
+function hasLocalPromptActivity() {
+  return (
+    document.activeElement === promptInput ||
+    saveTimer !== null ||
+    Date.now() - lastPromptEditAt < 900
+  );
+}
+
 async function refreshTabStateFromStorage() {
   if (!activeTabKey) {
     return;
@@ -423,8 +511,12 @@ async function refreshTabStateFromStorage() {
 
   const store = await getPopupStore();
   currentTabState = normalizeTabState(store[activeTabKey]);
-  promptInput.value = currentTabState.draftPrompt;
+  setPromptValue(currentTabState.draftPrompt, {
+    selectionStart: currentTabState.promptSelectionStart,
+    selectionEnd: currentTabState.promptSelectionEnd
+  });
   setSelectedMode(currentTabState.draftMode, false);
+  renderSelectedElements();
   renderCacheState();
 }
 
@@ -435,6 +527,7 @@ function scheduleDraftSave() {
 
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(() => {
+    saveTimer = null;
     persistTabState().catch(() => {});
   }, 150);
 }
@@ -694,6 +787,115 @@ function renderCacheState() {
   reconcileDetailPane();
 }
 
+function selectedElementLabel(element) {
+  const identity =
+    element.visibleText ||
+    element.id ||
+    (element.classes || []).slice(0, 2).join(".") ||
+    "";
+  return [`'${element.reference}'`, element.tagName ? `<${element.tagName}>` : "", identity]
+    .filter(Boolean)
+    .join(" ");
+}
+
+function renderSelectedElements() {
+  const elements = currentTabState.selectedElements || [];
+  selectedElementsList.replaceChildren();
+  selectedElementsList.hidden = !elements.length;
+
+  elements.forEach((element) => {
+    const chip = document.createElement("span");
+    chip.className = "selected-element-chip";
+    chip.title = selectedElementLabel(element);
+
+    const label = document.createElement("span");
+    label.textContent = selectedElementLabel(element);
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.dataset.reference = element.reference;
+    remove.setAttribute("aria-label", `Remove ${element.reference}`);
+    remove.textContent = "x";
+
+    chip.append(label, remove);
+    selectedElementsList.append(chip);
+  });
+}
+
+function removeReferenceFromPrompt(reference) {
+  const escaped = reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const nextValue = promptInput.value
+    .replace(new RegExp(`\\s*'?${escaped}'?`, "g"), " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+  setPromptValue(nextValue, { focus: document.activeElement === promptInput });
+  syncPromptDraftFromInput();
+}
+
+async function removeSelectedReference(reference) {
+  currentTabState.selectedElements = (currentTabState.selectedElements || []).filter(
+    (element) => element.reference !== reference
+  );
+  removeReferenceFromPrompt(reference);
+  renderSelectedElements();
+  scheduleDraftSave();
+
+  const tab = activeTab || (await getActiveTab().catch(() => null));
+  if (tab?.id) {
+    sendTabMessage(tab.id, { type: "FORGET_SELECTED_ELEMENT", reference }, 2000).catch(() => {});
+  }
+}
+
+async function beginElementSelection() {
+  const tab = activeTab || (await getActiveTab());
+  await ensureContentScript(tab);
+  syncPromptDraftFromInput();
+
+  const nextReference = `element${currentTabState.nextElementIndex || 1}`;
+  currentTabState.selectionMode = true;
+  await persistTabState();
+
+  const response = await sendRuntimeMessage(
+    {
+      type: "BEGIN_ELEMENT_SELECTION",
+      payload: {
+        tabId: tab.id,
+        tabStateKey: activeTabKey,
+        pageUrl: tab.url,
+        pageKey: pageStateKey(tab),
+        promptText: promptInput.value,
+        selectionStart: promptInput.selectionStart || 0,
+        selectionEnd: promptInput.selectionEnd || promptInput.selectionStart || 0,
+        nextReference
+      }
+    },
+    7000
+  );
+
+  if (response?.status === "error" || !response?.ok) {
+    currentTabState.selectionMode = false;
+    await persistTabState();
+    throw new Error(response?.error?.message || "Could not start element selection.");
+  }
+
+  startElementPick.hidden = true;
+  cancelElementPick.hidden = false;
+  setComposerStatus("Hover the page, then click an element.", "ready");
+}
+
+async function cancelElementSelection() {
+  const tab = activeTab || (await getActiveTab());
+  currentTabState.selectionMode = false;
+  startElementPick.hidden = false;
+  cancelElementPick.hidden = true;
+  await persistTabState();
+  await sendRuntimeMessage(
+    { type: "CANCEL_ELEMENT_SELECTION", payload: { tabId: tab.id } },
+    5000
+  ).catch(() => {});
+  setComposerStatus("Element selection cancelled.", "ready", true);
+}
+
 async function clearCurrentSiteCache() {
   let activeSiteKey = "";
   try {
@@ -740,8 +942,9 @@ async function clearCurrentSiteCache() {
   });
 
   currentTabState = createEmptyTabState();
-  promptInput.value = "";
+  setPromptValue("");
   collapseDetailPane();
+  renderSelectedElements();
   renderCacheState();
   clearAllPopupCache.textContent = "Clear all";
   setComposerStatus("This site cache cleared.", "ready", true);
@@ -880,7 +1083,8 @@ async function saveGeneratedVersion(prompt, mode, snapshotHtml) {
     history: sortHistory(history)
   });
 
-  promptInput.value = "";
+  setPromptValue("");
+  renderSelectedElements();
   renderCacheState();
   await persistTabState();
   return versionId;
@@ -1011,7 +1215,7 @@ async function rollbackVersion(versionId) {
   const newVersionId = await saveGeneratedVersion(selected.prompt, selected.mode, snapshot.html);
 
   if (keptDraft) {
-    promptInput.value = keptDraft;
+    setPromptValue(keptDraft);
     currentTabState.draftPrompt = keptDraft;
   }
   // Always re-apply the composer mode (independent of the prompt draft) so the
@@ -1032,7 +1236,7 @@ async function rollbackVersion(versionId) {
         tabStateKey: activeTabKey,
         user_prompt: selected.prompt,
         selected_mode: selected.mode || null,
-        params: {}
+        params: { selected_elements: currentTabState.selectedElements || [] }
       }
     },
     7000
@@ -1059,9 +1263,31 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
     return;
   }
 
-  currentTabState = normalizeTabState(nextState);
-  promptInput.value = currentTabState.draftPrompt;
+  const normalized = normalizeTabState(nextState);
+  const hasNewSelection =
+    (normalized.selectedElements || []).length > (currentTabState.selectedElements || []).length;
+  const shouldKeepLocalPrompt = hasLocalPromptActivity() && !hasNewSelection;
+
+  if (shouldKeepLocalPrompt) {
+    normalized.draftPrompt = promptInput.value;
+    normalized.draftMode = currentTabState.draftMode;
+    normalized.promptSelectionStart = promptInput.selectionStart || 0;
+    normalized.promptSelectionEnd = promptInput.selectionEnd || normalized.promptSelectionStart;
+    normalized.selectedElements = currentTabState.selectedElements || [];
+    normalized.nextElementIndex = currentTabState.nextElementIndex || 1;
+  }
+
+  currentTabState = normalized;
+  if (!shouldKeepLocalPrompt) {
+    setPromptValue(currentTabState.draftPrompt, {
+      selectionStart: currentTabState.promptSelectionStart,
+      selectionEnd: currentTabState.promptSelectionEnd
+    });
+  }
   setSelectedMode(currentTabState.draftMode, false);
+  startElementPick.hidden = currentTabState.selectionMode;
+  cancelElementPick.hidden = !currentTabState.selectionMode;
+  renderSelectedElements();
   renderCacheState();
 });
 
@@ -1091,17 +1317,26 @@ async function loadTabState(tab) {
   currentTabState = normalizeTabState(store[activeTabKey]);
   await ensureOriginalVersionFromHtmlCache(tab);
   await ensureGeneratedVersionFromHtmlCache(tab);
-  promptInput.value = currentTabState.draftPrompt;
+  setPromptValue(currentTabState.draftPrompt, {
+    selectionStart: currentTabState.promptSelectionStart,
+    selectionEnd: currentTabState.promptSelectionEnd
+  });
   setSelectedMode(currentTabState.draftMode, false);
+  startElementPick.hidden = currentTabState.selectionMode;
+  cancelElementPick.hidden = !currentTabState.selectionMode;
+  renderSelectedElements();
   renderCacheState();
 }
 
 // Mode buttons are created (with their click handlers) in renderModes().
 
 promptInput.addEventListener("input", () => {
-  currentTabState.draftPrompt = promptInput.value;
-  currentTabState.draftMode = selectedMode;
+  syncPromptDraftFromInput();
   scheduleDraftSave();
+});
+
+["click", "keyup", "select"].forEach((eventName) => {
+  promptInput.addEventListener(eventName, rememberPromptSelection);
 });
 
 historyToggle.addEventListener("click", async () => {
@@ -1120,6 +1355,30 @@ clearAllPopupCache.addEventListener("click", () => {
     clearAllPopupCache.disabled = false;
     clearAllPopupCache.textContent = "Clear all";
     setComposerStatus(error.message || "Could not clear cache.", "error", true);
+  });
+});
+
+selectedElementsList.addEventListener("click", (event) => {
+  const reference = event.target?.dataset?.reference;
+  if (!reference) {
+    return;
+  }
+  removeSelectedReference(reference).catch((error) => {
+    setComposerStatus(error.message || "Could not remove selected element.", "error", true);
+  });
+});
+
+startElementPick.addEventListener("click", () => {
+  beginElementSelection().catch((error) => {
+    startElementPick.hidden = false;
+    cancelElementPick.hidden = true;
+    setComposerStatus(error.message || "Could not start element selection.", "error", true);
+  });
+});
+
+cancelElementPick.addEventListener("click", () => {
+  cancelElementSelection().catch((error) => {
+    setComposerStatus(error.message || "Could not cancel selection.", "error", true);
   });
 });
 
@@ -1194,7 +1453,7 @@ applyPrompt.addEventListener("click", async () => {
           tabStateKey: activeTabKey,
           user_prompt: userPrompt,
           selected_mode: mode || null,
-          params: {}
+          params: { selected_elements: currentTabState.selectedElements || [] }
         }
       },
       7000

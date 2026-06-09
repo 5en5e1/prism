@@ -35,6 +35,24 @@
       return true;
     }
 
+    if (message?.type === "START_ELEMENT_SELECTION") {
+      startElementSelection(message.reference);
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    if (message?.type === "CANCEL_ELEMENT_SELECTION") {
+      stopElementSelection();
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    if (message?.type === "FORGET_SELECTED_ELEMENT") {
+      forgetSelectedElement(message.reference);
+      sendResponse({ ok: true });
+      return true;
+    }
+
     if (message?.type === "PING_CONTENT_SCRIPT") {
       sendResponse({ ok: true });
       return true;
@@ -630,6 +648,393 @@
     }
   }
 
+  let selectionState = { active: false, reference: "", hovered: null };
+  let selectionHighlight = null;
+  let selectionStyles = null;
+  const selectionMarkers = new Map();
+
+  function cssEscape(value) {
+    if (window.CSS?.escape) {
+      return window.CSS.escape(value);
+    }
+    return String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
+  }
+
+  function cssString(value) {
+    return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  }
+
+  function ensureSelectionStyles() {
+    if (selectionStyles) {
+      return;
+    }
+    selectionStyles = document.createElement("style");
+    selectionStyles.id = "prism-element-selection-styles";
+    selectionStyles.textContent = `
+      #prism-element-highlight {
+        position: fixed;
+        z-index: 2147483646;
+        pointer-events: none;
+        border: 2px solid #2563eb;
+        background: rgba(37, 99, 235, 0.12);
+        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+        border-radius: 6px;
+        transition: top 80ms ease, left 80ms ease, width 80ms ease, height 80ms ease;
+      }
+      .prism-selected-marker {
+        position: fixed;
+        z-index: 2147483645;
+        pointer-events: none;
+        border: 2px solid #059669;
+        background: rgba(5, 150, 105, 0.1);
+        border-radius: 6px;
+        box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.14);
+      }
+      .prism-selected-marker::before {
+        position: absolute;
+        top: -26px;
+        left: -2px;
+        min-width: max-content;
+        border-radius: 999px;
+        padding: 4px 8px;
+        background: #059669;
+        color: white;
+        content: attr(data-prism-reference);
+        font: 700 12px/1.2 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      }
+    `;
+    (document.head || document.documentElement).appendChild(selectionStyles);
+  }
+
+  function ensureSelectionHighlight() {
+    ensureSelectionStyles();
+    if (!selectionHighlight) {
+      selectionHighlight = document.createElement("div");
+      selectionHighlight.id = "prism-element-highlight";
+      selectionHighlight.hidden = true;
+      document.documentElement.appendChild(selectionHighlight);
+    }
+    return selectionHighlight;
+  }
+
+  function isPrismSelectionUi(node) {
+    return Boolean(
+      node?.nodeType === Node.ELEMENT_NODE &&
+        node.closest?.("#prism-element-highlight, .prism-selected-marker, #prism-element-selection-styles")
+    );
+  }
+
+  function rectIsUsable(rect) {
+    return rect && rect.width >= 4 && rect.height >= 4;
+  }
+
+  function isMeaningfulElement(el) {
+    if (!el || el === document.documentElement || el === document.body) {
+      return false;
+    }
+    const rect = el.getBoundingClientRect();
+    if (!rectIsUsable(rect)) {
+      return false;
+    }
+    const tag = el.tagName;
+    const semanticTags = {
+      A: 1,
+      BUTTON: 1,
+      IMG: 1,
+      NAV: 1,
+      ASIDE: 1,
+      HEADER: 1,
+      FOOTER: 1,
+      MAIN: 1,
+      SECTION: 1,
+      ARTICLE: 1,
+      FORM: 1,
+      INPUT: 1,
+      TEXTAREA: 1,
+      SELECT: 1,
+      LABEL: 1,
+      CARD: 1
+    };
+    return Boolean(
+      semanticTags[tag] ||
+        el.id ||
+        el.getAttribute("role") ||
+        el.getAttribute("aria-label") ||
+        el.getAttribute("data-testid") ||
+        el.getAttribute("data-test") ||
+        (typeof el.className === "string" && el.className.trim()) ||
+        (el.textContent || "").trim()
+    );
+  }
+
+  function nearestMeaningfulElement(raw) {
+    let el = raw?.nodeType === Node.ELEMENT_NODE ? raw : raw?.parentElement;
+    if (!el || isPrismSelectionUi(el)) {
+      return null;
+    }
+
+    const first = el;
+    while (el && el !== document.documentElement && el !== document.body) {
+      const rect = el.getBoundingClientRect();
+      if (isMeaningfulElement(el) && (rect.width >= 16 || rect.height >= 16)) {
+        return el;
+      }
+      el = el.parentElement;
+    }
+    return first;
+  }
+
+  function setOverlayRect(overlay, rect) {
+    overlay.style.left = `${Math.max(0, Math.round(rect.left))}px`;
+    overlay.style.top = `${Math.max(0, Math.round(rect.top))}px`;
+    overlay.style.width = `${Math.round(rect.width)}px`;
+    overlay.style.height = `${Math.round(rect.height)}px`;
+  }
+
+  function updateSelectionHighlight(el) {
+    const overlay = ensureSelectionHighlight();
+    if (!el) {
+      overlay.hidden = true;
+      return;
+    }
+    const rect = el.getBoundingClientRect();
+    if (!rectIsUsable(rect)) {
+      overlay.hidden = true;
+      return;
+    }
+    setOverlayRect(overlay, rect);
+    overlay.hidden = false;
+  }
+
+  function handleSelectionPointerMove(event) {
+    if (!selectionState.active) {
+      return;
+    }
+    const target = nearestMeaningfulElement(event.composedPath?.()[0] || event.target);
+    selectionState.hovered = target;
+    updateSelectionHighlight(target);
+  }
+
+  function blockSelectionEvent(event) {
+    if (!selectionState.active) {
+      return;
+    }
+    event.preventDefault();
+    event.stopImmediatePropagation();
+  }
+
+  function uniqueSelectorCandidates(el) {
+    const candidates = [];
+    const tag = el.tagName.toLowerCase();
+    if (el.id) {
+      candidates.push(`#${cssEscape(el.id)}`);
+      candidates.push(`${tag}#${cssEscape(el.id)}`);
+    }
+    ["data-testid", "data-test", "data-cy", "aria-label", "name", "role", "alt", "title"].forEach((name) => {
+      const value = el.getAttribute(name);
+      if (value) {
+        candidates.push(`${tag}[${name}="${cssString(value)}"]`);
+        candidates.push(`[${name}="${cssString(value)}"]`);
+      }
+    });
+    if (typeof el.className === "string") {
+      const classes = el.className.trim().split(/\s+/).filter(Boolean).slice(0, 4);
+      if (classes.length) {
+        candidates.push(`${tag}.${classes.map(cssEscape).join(".")}`);
+      }
+    }
+    candidates.push(domPathSelector(el));
+    return [...new Set(candidates)].filter((candidate) => {
+      try {
+        return document.querySelector(candidate);
+      } catch (_error) {
+        return false;
+      }
+    });
+  }
+
+  function nthOfType(el) {
+    let index = 1;
+    let node = el;
+    while ((node = node.previousElementSibling)) {
+      if (node.tagName === el.tagName) {
+        index += 1;
+      }
+    }
+    return `${el.tagName.toLowerCase()}:nth-of-type(${index})`;
+  }
+
+  function domPathSelector(el) {
+    const steps = [];
+    let node = el;
+    while (node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement) {
+      if (node.id) {
+        steps.unshift(`${node.tagName.toLowerCase()}#${cssEscape(node.id)}`);
+        break;
+      }
+      steps.unshift(nthOfType(node));
+      node = node.parentElement;
+    }
+    return steps.join(" > ");
+  }
+
+  function domPath(el) {
+    const path = [];
+    let node = el;
+    while (node && node.nodeType === Node.ELEMENT_NODE && node !== document.documentElement) {
+      path.unshift({
+        tag: node.tagName.toLowerCase(),
+        id: node.id || "",
+        classes: typeof node.className === "string" ? node.className.trim().split(/\s+/).filter(Boolean) : [],
+        nthOfType: nthOfType(node)
+      });
+      node = node.parentElement;
+    }
+    return path;
+  }
+
+  function selectedElementRecord(el, reference) {
+    const rect = el.getBoundingClientRect();
+    const dataAttributes = {};
+    const attributes = {};
+    Array.from(el.attributes || []).forEach((attr) => {
+      if (attr.name.startsWith("data-")) {
+        dataAttributes[attr.name] = attr.value.slice(0, 160);
+      }
+      if (["href", "src", "alt", "title", "name", "type", "role", "aria-label"].includes(attr.name)) {
+        attributes[attr.name] = attr.value.slice(0, 200);
+      }
+    });
+    const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240);
+    const classes = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter(Boolean) : [];
+    const box = {
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.width),
+      height: Math.round(rect.height),
+      top: Math.round(rect.top + window.scrollY),
+      left: Math.round(rect.left + window.scrollX)
+    };
+    return {
+      reference,
+      pageUrl: window.location.href,
+      pageKey: getPageKey(),
+      selectorCandidates: uniqueSelectorCandidates(el),
+      domPath: domPath(el),
+      visibleText: text,
+      tagName: el.tagName.toLowerCase(),
+      id: el.id || "",
+      classes,
+      dataAttributes,
+      attributes,
+      boundingBox: box,
+      visualPosition: {
+        viewportWidth: window.innerWidth,
+        viewportHeight: window.innerHeight,
+        scrollX: window.scrollX,
+        scrollY: window.scrollY
+      },
+      semanticRole: el.getAttribute("role") || el.getAttribute("aria-label") || "",
+      fingerprint: stableHash(`${el.tagName}|${el.id}|${classes.join(".")}|${text}|${box.width}x${box.height}`),
+      selectedAt: new Date().toISOString()
+    };
+  }
+
+  function placeSelectedMarker(reference, el) {
+    ensureSelectionStyles();
+    let marker = selectionMarkers.get(reference)?.marker;
+    if (!marker) {
+      marker = document.createElement("div");
+      marker.className = "prism-selected-marker";
+      marker.dataset.prismReference = reference;
+      document.documentElement.appendChild(marker);
+    }
+    setOverlayRect(marker, el.getBoundingClientRect());
+    selectionMarkers.set(reference, { el, marker });
+  }
+
+  function refreshSelectedMarkers() {
+    selectionMarkers.forEach(({ el, marker }) => {
+      if (!document.documentElement.contains(el)) {
+        marker.remove();
+        selectionMarkers.delete(marker.dataset.prismReference);
+        return;
+      }
+      setOverlayRect(marker, el.getBoundingClientRect());
+    });
+  }
+
+  function forgetSelectedElement(reference) {
+    const selected = selectionMarkers.get(reference);
+    if (selected?.marker) {
+      selected.marker.remove();
+    }
+    selectionMarkers.delete(reference);
+  }
+
+  function clearSelectedElementMarkers() {
+    selectionMarkers.forEach(({ marker }) => marker.remove());
+    selectionMarkers.clear();
+  }
+
+  function handleSelectionClick(event) {
+    if (!selectionState.active) {
+      return;
+    }
+    blockSelectionEvent(event);
+    const target = selectionState.hovered || nearestMeaningfulElement(event.composedPath?.()[0] || event.target);
+    if (!target) {
+      return;
+    }
+    const reference = selectionState.reference;
+    const record = selectedElementRecord(target, reference);
+    placeSelectedMarker(reference, target);
+    stopElementSelection();
+    chrome.runtime.sendMessage({
+      type: "ELEMENT_SELECTED",
+      payload: { element: record }
+    });
+  }
+
+  function handleSelectionKeydown(event) {
+    if (selectionState.active && event.key === "Escape") {
+      blockSelectionEvent(event);
+      stopElementSelection();
+      chrome.runtime.sendMessage({ type: "ELEMENT_SELECTION_CANCELLED" });
+    }
+  }
+
+  function startElementSelection(reference) {
+    stopElementSelection();
+    selectionState = { active: true, reference: reference || "element1", hovered: null };
+    ensureSelectionHighlight();
+    document.addEventListener("pointermove", handleSelectionPointerMove, true);
+    document.addEventListener("pointerdown", blockSelectionEvent, true);
+    document.addEventListener("mousedown", blockSelectionEvent, true);
+    document.addEventListener("mouseup", blockSelectionEvent, true);
+    document.addEventListener("click", handleSelectionClick, true);
+    document.addEventListener("dblclick", blockSelectionEvent, true);
+    document.addEventListener("auxclick", blockSelectionEvent, true);
+    document.addEventListener("keydown", handleSelectionKeydown, true);
+    window.addEventListener("scroll", refreshSelectedMarkers, true);
+    window.addEventListener("resize", refreshSelectedMarkers, true);
+  }
+
+  function stopElementSelection() {
+    document.removeEventListener("pointermove", handleSelectionPointerMove, true);
+    document.removeEventListener("pointerdown", blockSelectionEvent, true);
+    document.removeEventListener("mousedown", blockSelectionEvent, true);
+    document.removeEventListener("mouseup", blockSelectionEvent, true);
+    document.removeEventListener("click", handleSelectionClick, true);
+    document.removeEventListener("dblclick", blockSelectionEvent, true);
+    document.removeEventListener("auxclick", blockSelectionEvent, true);
+    document.removeEventListener("keydown", handleSelectionKeydown, true);
+    selectionState = { active: false, reference: "", hovered: null };
+    if (selectionHighlight) {
+      selectionHighlight.hidden = true;
+    }
+  }
+
   function resetRuntimePatchState() {
     patchState = { patches: [], cssVars: {}, cssRules: [], pageKey: getPageKey(), navigationEpoch: browserSession.navigationEpoch };
     if (observer) {
@@ -653,7 +1058,13 @@
       navigationEpoch: browserSession.navigationEpoch + 1,
       liveDomValid: false
     };
+    const hadActiveSelection = selectionState.active;
     resetRuntimePatchState();
+    stopElementSelection();
+    clearSelectedElementMarkers();
+    if (hadActiveSelection) {
+      chrome.runtime.sendMessage({ type: "ELEMENT_SELECTION_CANCELLED" });
+    }
     window.setTimeout(() => {
       browserSession.liveDomValid = true;
       applyCachedPatches();

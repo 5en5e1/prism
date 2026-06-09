@@ -1,6 +1,17 @@
 ## User Request
 
 {{ user_prompt }}
+{% if selected_elements_context %}
+## Selected Element References
+
+The user selected these live page elements before submitting the prompt:
+
+{{ selected_elements_context }}
+
+If the request mentions a quoted reference like `'element1'`, treat it as
+the corresponding anchor id above. Do not guess another element unless that
+reference could not be resolved.
+{% endif %}
 {% if css_context %}
 ## Styles (existing design system — keep edits consistent with this)
 

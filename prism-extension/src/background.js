@@ -9,6 +9,7 @@ const HTML_CACHE_KEY = "domHtmlCache";
 const JOB_STATUS_KEY = "lastJob";
 const PENDING_JOBS_KEY = "pendingJobs";
 const POPUP_TAB_STATE_KEY = "popupTabPromptState";
+const ELEMENT_SELECTION_SESSIONS_KEY = "elementSelectionSessions";
 const MAX_CACHED_PAGES = 20;
 const OFFSCREEN_PATH = "offscreen.html";
 const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
@@ -50,15 +51,24 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  chrome.storage.local.get(POPUP_TAB_STATE_KEY).then((data) => {
+  chrome.storage.local.get([POPUP_TAB_STATE_KEY, ELEMENT_SELECTION_SESSIONS_KEY]).then((data) => {
     const tabState = data[POPUP_TAB_STATE_KEY] || {};
+    const sessions = data[ELEMENT_SELECTION_SESSIONS_KEY] || {};
+    const updates = {};
 
     if (!tabState[String(tabId)]) {
+      delete sessions[String(tabId)];
+      updates[ELEMENT_SELECTION_SESSIONS_KEY] = sessions;
+      chrome.storage.local.set(updates);
       return;
     }
 
     delete tabState[String(tabId)];
-    chrome.storage.local.set({ [POPUP_TAB_STATE_KEY]: tabState });
+    delete sessions[String(tabId)];
+    chrome.storage.local.set({
+      [POPUP_TAB_STATE_KEY]: tabState,
+      [ELEMENT_SELECTION_SESSIONS_KEY]: sessions
+    });
   });
 });
 
@@ -94,6 +104,34 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 
   if (message?.type === "ROLLBACK_TO_VERSION") {
     rollbackToVersion(message.payload)
+      .then(sendResponse)
+      .catch((error) => sendResponse(toErrorResponse(error)));
+    return true;
+  }
+
+  if (message?.type === "BEGIN_ELEMENT_SELECTION") {
+    beginElementSelection(message.payload)
+      .then(sendResponse)
+      .catch((error) => sendResponse(toErrorResponse(error)));
+    return true;
+  }
+
+  if (message?.type === "CANCEL_ELEMENT_SELECTION") {
+    cancelElementSelection(message.payload)
+      .then(sendResponse)
+      .catch((error) => sendResponse(toErrorResponse(error)));
+    return true;
+  }
+
+  if (message?.type === "ELEMENT_SELECTED") {
+    finishElementSelection(message.payload, _sender)
+      .then(sendResponse)
+      .catch((error) => sendResponse(toErrorResponse(error)));
+    return true;
+  }
+
+  if (message?.type === "ELEMENT_SELECTION_CANCELLED") {
+    cancelElementSelection({ tabId: _sender.tab?.id })
       .then(sendResponse)
       .catch((error) => sendResponse(toErrorResponse(error)));
     return true;
@@ -141,6 +179,154 @@ function getPageKey(url) {
   if (query) routeKey += `?${query}`;
   if (hashRoute) routeKey += `#${hashRoute}`;
   return `${parsedUrl.origin}${routeKey}`;
+}
+
+async function getElementSelectionSessions() {
+  const data = await chrome.storage.local.get(ELEMENT_SELECTION_SESSIONS_KEY);
+  return data[ELEMENT_SELECTION_SESSIONS_KEY] || {};
+}
+
+async function saveElementSelectionSessions(sessions) {
+  await chrome.storage.local.set({ [ELEMENT_SELECTION_SESSIONS_KEY]: sessions });
+}
+
+function insertReferenceIntoText(text, reference, start, end) {
+  const value = typeof text === "string" ? text : "";
+  const boundedStart = Math.min(Math.max(Number(start) || 0, 0), value.length);
+  const boundedEnd = Math.min(Math.max(Number(end) || boundedStart, 0), value.length);
+  const before = value.slice(0, boundedStart);
+  const after = value.slice(boundedEnd);
+  const token = `'${reference}'`;
+  const leading = before && !/\s$/.test(before) ? " " : "";
+  const trailing = after && !/^\s/.test(after) ? " " : "";
+  const insertion = `${leading}${token}${trailing}`;
+  return {
+    text: `${before}${insertion}${after}`,
+    cursor: boundedStart + insertion.length
+  };
+}
+
+function normalizePopupState(state = {}) {
+  return {
+    draftPrompt: "",
+    draftMode: null,
+    current: null,
+    history: [],
+    nextIndex: 1,
+    historyExpanded: false,
+    selectedElements: [],
+    nextElementIndex: 1,
+    promptSelectionStart: 0,
+    promptSelectionEnd: 0,
+    selectionMode: false,
+    ...state
+  };
+}
+
+async function beginElementSelection(payload = {}) {
+  const { tabId, tabStateKey, nextReference } = payload;
+  if (typeof tabId !== "number" || !tabStateKey || !nextReference) {
+    throw new Error("Element selection is missing tab or prompt state.");
+  }
+
+  const sessions = await getElementSelectionSessions();
+  sessions[String(tabId)] = {
+    tabStateKey,
+    pageUrl: payload.pageUrl || "",
+    pageKey: payload.pageKey || "",
+    promptText: payload.promptText || "",
+    selectionStart: payload.selectionStart || 0,
+    selectionEnd: payload.selectionEnd || payload.selectionStart || 0,
+    nextReference,
+    startedAt: new Date().toISOString()
+  };
+  await saveElementSelectionSessions(sessions);
+
+  try {
+    await chrome.tabs.sendMessage(tabId, {
+      type: "START_ELEMENT_SELECTION",
+      reference: nextReference
+    });
+  } catch (error) {
+    delete sessions[String(tabId)];
+    await saveElementSelectionSessions(sessions);
+    throw error;
+  }
+  return { ok: true };
+}
+
+async function cancelElementSelection(payload = {}) {
+  const tabId = payload.tabId;
+  if (typeof tabId !== "number") {
+    return { ok: true };
+  }
+
+  const sessions = await getElementSelectionSessions();
+  const session = sessions[String(tabId)];
+  delete sessions[String(tabId)];
+  await saveElementSelectionSessions(sessions);
+  if (session?.tabStateKey) {
+    const data = await chrome.storage.local.get(POPUP_TAB_STATE_KEY);
+    const tabState = data[POPUP_TAB_STATE_KEY] || {};
+    const state = normalizePopupState(tabState[session.tabStateKey]);
+    tabState[session.tabStateKey] = { ...state, selectionMode: false };
+    await chrome.storage.local.set({ [POPUP_TAB_STATE_KEY]: tabState });
+  }
+  await chrome.tabs.sendMessage(tabId, { type: "CANCEL_ELEMENT_SELECTION" }).catch(() => {});
+  return { ok: true };
+}
+
+async function finishElementSelection(payload = {}, sender = {}) {
+  const tabId = sender.tab?.id;
+  if (typeof tabId !== "number") {
+    throw new Error("Selected element did not come from a tab.");
+  }
+
+  const sessions = await getElementSelectionSessions();
+  const session = sessions[String(tabId)];
+  if (!session) {
+    throw new Error("No active element selection session.");
+  }
+  delete sessions[String(tabId)];
+  await saveElementSelectionSessions(sessions);
+
+  const record = {
+    ...(payload.element || {}),
+    reference: session.nextReference,
+    pageUrl: payload.element?.pageUrl || session.pageUrl || sender.tab?.url || "",
+    pageKey: payload.element?.pageKey || session.pageKey || ""
+  };
+  const inserted = insertReferenceIntoText(
+    session.promptText,
+    record.reference,
+    session.selectionStart,
+    session.selectionEnd
+  );
+
+  const data = await chrome.storage.local.get(POPUP_TAB_STATE_KEY);
+  const tabState = data[POPUP_TAB_STATE_KEY] || {};
+  const state = normalizePopupState(tabState[session.tabStateKey]);
+  const existing = Array.isArray(state.selectedElements) ? state.selectedElements : [];
+  const selectedElements = [
+    ...existing.filter((element) => element.reference !== record.reference),
+    record
+  ];
+
+  tabState[session.tabStateKey] = {
+    ...state,
+    draftPrompt: inserted.text,
+    selectedElements,
+    nextElementIndex: Math.max(
+      Number(state.nextElementIndex) || 1,
+      selectedElements.length + 1
+    ),
+    promptSelectionStart: inserted.cursor,
+    promptSelectionEnd: inserted.cursor,
+    selectionMode: false
+  };
+
+  await chrome.storage.local.set({ [POPUP_TAB_STATE_KEY]: tabState });
+  return { ok: true, reference: record.reference };
 }
 
 async function setJobStatus(state, message, extra = {}) {

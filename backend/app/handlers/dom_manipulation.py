@@ -14,7 +14,7 @@ from ..core.exceptions import MalformedResponseError, OversizeError, ValidationE
 from ..core.registry import register_handler
 from ..core.tracing import get_logger
 from ..handlers.base import Handler, Message, ModelConfig, ProcessedContext
-from ..preprocessing.anchor_skeleton import build_anchored_skeleton
+from ..preprocessing.anchor_skeleton import ANCHOR_ATTR, build_anchored_skeleton
 from ..preprocessing.patch_applier import _DESTRUCTIVE, _PROTECTED, apply_patches
 from ..preprocessing.selector import (
     compute_unique_ids,
@@ -30,6 +30,42 @@ from ..schemas.dom_manipulation import (
 from ..state.models import PageIdentity, canonicalize_page_identity, snapshot_for_html
 
 logger = get_logger(__name__)
+
+
+def _selected_element_context(soup, selected_elements: list[dict]) -> str:
+    """Resolve popup-selected element references to skeleton anchor ids."""
+
+    lines: list[str] = []
+    for element in selected_elements or []:
+        reference = str(element.get("reference") or "").strip()
+        if not reference:
+            continue
+        resolved = None
+        for selector in element.get("selectorCandidates") or []:
+            try:
+                matches = soup.select(selector)
+            except Exception:
+                matches = []
+            if len(matches) == 1:
+                resolved = matches[0]
+                break
+        if resolved is None:
+            lines.append(
+                f"- '{reference}' could not be resolved exactly; use visible text "
+                f"{element.get('visibleText', '')!r} only as a hint."
+            )
+            continue
+        anchor = resolved.get(ANCHOR_ATTR)
+        text = " ".join((resolved.get_text(" ", strip=True) or "").split())[:120]
+        tag = resolved.name
+        dom_id = resolved.get("id", "")
+        classes = ".".join(resolved.get("class", [])[:4])
+        label = f"<{tag}{'#' + dom_id if dom_id else ''}{'.' + classes if classes else ''}>"
+        lines.append(
+            f"- '{reference}' means @{anchor} {label} "
+            f"text={text!r}. When the user mentions '{reference}', target @{anchor}."
+        )
+    return "\n".join(lines)
 
 
 @register_handler("dom_manipulation")
@@ -112,6 +148,10 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
                 "skeleton_stats": doc.stats,
                 "page_identity": params.page_identity,
                 "page_snapshot": params.page_snapshot,
+                "selected_elements_context": _selected_element_context(
+                    doc.soup,
+                    params.params.selected_elements,
+                ),
             },
         )
 
@@ -131,6 +171,7 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
             user_prompt=user_prompt,
             skeleton=context.processed_html,
             css_context=context.metadata.get("css_context", ""),
+            selected_elements_context=context.metadata.get("selected_elements_context", ""),
         )
         if not user_content:
             raise ValueError("User template not found for dom_manipulation")

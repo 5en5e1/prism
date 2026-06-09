@@ -263,6 +263,10 @@ class DOMManipulationParams(BaseModel):
     validate_selectors: bool = Field(
         default=True, description="Validate that selectors exist before applying"
     )
+    selected_elements: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="User-selected page elements referenced from the prompt",
+    )
 
 
 class DOMManipulationResult(BaseModel):
