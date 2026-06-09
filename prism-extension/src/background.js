@@ -1,4 +1,9 @@
 const API_HEALTH_TIMEOUT_MS = 4000;
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const LEGACY_API_BASE_URLS = new Set([
+  "http://192.168.1.16:8000",
+  "http://192.168.1.16:8000/"
+]);
 
 const HTML_CACHE_KEY = "domHtmlCache";
 const JOB_STATUS_KEY = "lastJob";
@@ -36,7 +41,7 @@ chrome.runtime.onInstalled.addListener(({ reason }) => {
   if (reason === "install") {
     chrome.storage.local.set({
       settings: {
-        apiBaseUrl: "http://localhost:8000/",
+        apiBaseUrl: DEFAULT_API_BASE_URL,
         enabled: true
       }
     });
@@ -146,22 +151,58 @@ async function cachePageResult(pageUrl, entry) {
   const pageKey = getPageKey(pageUrl);
   const data = await chrome.storage.local.get(HTML_CACHE_KEY);
   const cache = data[HTML_CACHE_KEY] || {};
+  const existing = cache[pageKey] || {};
 
   cache[pageKey] = {
+    originalHtml: existing.originalHtml || entry.originalHtml || "",
+    originalCapturedAt: existing.originalCapturedAt || entry.originalCapturedAt || "",
     pageUrl,
     updatedAt: new Date().toISOString(),
     ...entry
   };
 
-  const keys = Object.keys(cache);
-  if (keys.length > MAX_CACHED_PAGES) {
-    keys
-      .sort((a, b) => (cache[a]?.updatedAt || "").localeCompare(cache[b]?.updatedAt || ""))
-      .slice(0, keys.length - MAX_CACHED_PAGES)
-      .forEach((key) => delete cache[key]);
-  }
+  evictOldestMutableEntries(cache, MAX_CACHED_PAGES);
 
   await chrome.storage.local.set({ [HTML_CACHE_KEY]: cache });
+}
+
+async function seedOriginalPageCache(pageUrl, html) {
+  if (!html) {
+    return;
+  }
+
+  const pageKey = getPageKey(pageUrl);
+  const data = await chrome.storage.local.get(HTML_CACHE_KEY);
+  const cache = data[HTML_CACHE_KEY] || {};
+  const existing = cache[pageKey] || {};
+
+  if (existing.originalHtml) {
+    return;
+  }
+
+  cache[pageKey] = {
+    ...existing,
+    pageUrl,
+    originalHtml: html,
+    originalCapturedAt: new Date().toISOString(),
+    updatedAt: existing.updatedAt || new Date().toISOString()
+  };
+
+  evictOldestMutableEntries(cache, MAX_CACHED_PAGES);
+  await chrome.storage.local.set({ [HTML_CACHE_KEY]: cache });
+}
+
+function evictOldestMutableEntries(cache, maxEntries) {
+  const keys = Object.keys(cache);
+  if (keys.length <= maxEntries) {
+    return;
+  }
+
+  keys
+    .filter((key) => !cache[key]?.originalHtml)
+    .sort((a, b) => (cache[a]?.updatedAt || "").localeCompare(cache[b]?.updatedAt || ""))
+    .slice(0, keys.length - maxEntries)
+    .forEach((key) => delete cache[key]);
 }
 
 function resultToCacheEntry(versionResult, version = {}) {
@@ -356,6 +397,7 @@ async function startProcessJob(payload) {
   });
 
   try {
+    await seedOriginalPageCache(pageUrl, payload.html);
     await ensureOffscreenDocument();
     await chrome.runtime.sendMessage({
       type: "OFFSCREEN_FETCH",
@@ -474,9 +516,13 @@ async function finalizeJob(message) {
 
 async function getSettings() {
   const { settings = {} } = await chrome.storage.local.get("settings");
+  const storedApiBaseUrl = settings.apiBaseUrl || DEFAULT_API_BASE_URL;
+  const apiBaseUrl = LEGACY_API_BASE_URLS.has(storedApiBaseUrl)
+    ? DEFAULT_API_BASE_URL
+    : storedApiBaseUrl;
 
   return {
-    apiBaseUrl: settings.apiBaseUrl || "http://localhost:8000",
+    apiBaseUrl,
     enabled: settings.enabled !== false
   };
 }

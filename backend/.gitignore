@@ -104,5 +104,3 @@ cython_debug/
 
 # Type checking
 .pyright/
-
-# Made with Bob

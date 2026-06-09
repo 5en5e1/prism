@@ -8,28 +8,54 @@
   </head>
   <body>
     <main class="settings-shell">
-      <header>
-        <p class="eyebrow">Settings</p>
-        <h1>Prism Options</h1>
+      <header class="page-hero">
+        <p class="eyebrow">Prism</p>
+        <h1>Options and cache</h1>
+        <p class="hero-copy">Configure the backend, open cached pages, or clear saved outputs and popup story.</p>
       </header>
 
-      <label class="field-row">
-        <span>
-          <strong>API base URL</strong>
-          <small>Used for /api/v1/process and /api/v1/health.</small>
-        </span>
-        <input id="apiBaseUrl" type="url" placeholder="http://localhost:8000">
-      </label>
+      <section class="panel settings-panel" aria-label="Backend settings">
+        <div class="panel-heading">
+          <div>
+            <p class="eyebrow">Backend</p>
+            <h2>Connection</h2>
+          </div>
+          <p id="saveState" class="save-state" aria-live="polite"></p>
+        </div>
 
-      <label class="setting-row">
-        <span>
-          <strong>Enable content script</strong>
-          <small>Lets the extension run on pages matched by the manifest.</small>
-        </span>
-        <input id="enabled" type="checkbox">
-      </label>
+        <label class="field-row">
+          <span>
+            <strong>API base URL</strong>
+            <small>Used for /api/v1/process, /api/v1/health, and /api/v1/modes.</small>
+          </span>
+          <input id="apiBaseUrl" type="url" placeholder="http://127.0.0.1:8000">
+        </label>
 
-      <p id="saveState" class="save-state" aria-live="polite"></p>
+        <label class="setting-row">
+          <span>
+            <strong>Enable content script</strong>
+            <small>Lets Prism run on pages matched by the manifest.</small>
+          </span>
+          <input id="enabled" type="checkbox">
+        </label>
+      </section>
+
+      <section class="panel cache-panel" aria-label="Cached webpages">
+        <div class="panel-heading cache-heading">
+          <div>
+            <p class="eyebrow">Cached Pages</p>
+            <h2>Saved webpage outputs</h2>
+          </div>
+          <div class="cache-actions">
+            <p id="cacheState" class="save-state" aria-live="polite"></p>
+            <button id="clearAllCache" class="danger-button" type="button">Clear everything</button>
+          </div>
+        </div>
+
+        <p class="section-note">Click a page to open it. If it still has a generated cache, the extension will re-apply that cached output when the page loads.</p>
+        <div id="cacheList" class="cache-list"></div>
+        <p id="cacheEmpty" class="empty-state" hidden>No cached webpages yet.</p>
+      </section>
     </main>
 
     <script src="options.js"></script>

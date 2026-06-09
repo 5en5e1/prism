@@ -7,8 +7,21 @@
     <link rel="stylesheet" href="popup.css">
   </head>
   <body>
-    <main class="popup-shell">
+    <div class="popup-frame">
+      <aside id="detailPane" class="detail-pane" aria-hidden="true" aria-label="Prompt detail">
+        <div class="detail-pane-inner">
+          <span id="detailMode" class="detail-pane-badge" hidden></span>
+          <p id="detailText" class="detail-pane-text"></p>
+        </div>
+      </aside>
+      <main class="popup-shell">
       <header class="tab-header">
+        <button id="openSettings" type="button" class="settings-button" aria-label="Open Prism settings">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M12 15.5a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7Z"></path>
+            <path d="M19.4 15a1.8 1.8 0 0 0 .36 1.98l.04.04a2.1 2.1 0 1 1-2.98 2.98l-.04-.04a1.8 1.8 0 0 0-1.98-.36 1.8 1.8 0 0 0-1.1 1.66V21.4a2.1 2.1 0 1 1-4.2 0v-.14a1.8 1.8 0 0 0-1.1-1.66 1.8 1.8 0 0 0-1.98.36l-.04.04a2.1 2.1 0 1 1-2.98-2.98l.04-.04A1.8 1.8 0 0 0 4.6 15a1.8 1.8 0 0 0-1.66-1.1H2.8a2.1 2.1 0 1 1 0-4.2h.14A1.8 1.8 0 0 0 4.6 8.6a1.8 1.8 0 0 0-.36-1.98l-.04-.04A2.1 2.1 0 1 1 7.18 3.6l.04.04a1.8 1.8 0 0 0 1.98.36 1.8 1.8 0 0 0 1.1-1.66V2.2a2.1 2.1 0 1 1 4.2 0v.14a1.8 1.8 0 0 0 1.1 1.66 1.8 1.8 0 0 0 1.98-.36l.04-.04a2.1 2.1 0 1 1 2.98 2.98l-.04.04a1.8 1.8 0 0 0-.36 1.98 1.8 1.8 0 0 0 1.66 1.1h.14a2.1 2.1 0 1 1 0 4.2h-.14A1.8 1.8 0 0 0 19.4 15Z"></path>
+          </svg>
+        </button>
         <p class="eyebrow">Prism</p>
         <h1 id="tabTitle">Current tab</h1>
         <p id="tabUrl" class="tab-url"></p>
@@ -37,8 +50,12 @@
             <div id="historyList" class="version-list history-list"></div>
           </div>
         </div>
+        <div class="global-cache-block" aria-label="Cached webpages">
+          <button id="clearAllPopupCache" type="button" class="clear-cache-button">Clear all</button>
+        </div>
       </section>
-    </main>
+      </main>
+    </div>
 
     <script src="popup.js"></script>
   </body>

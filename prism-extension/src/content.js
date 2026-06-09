@@ -394,7 +394,7 @@
     if (keys.length <= maxEntries) {
       return cache;
     }
-    const orderedKeys = keys.sort(
+    const orderedKeys = keys.filter((key) => !cache[key]?.originalHtml).sort(
       (a, b) => (cache[a]?.updatedAt || "").localeCompare(cache[b]?.updatedAt || "")
     );
     const trimmed = { ...cache };
@@ -406,7 +406,10 @@
 
   async function savePageCache(entry) {
     const cache = await getHtmlCache();
+    const existing = cache[entry.pageKey] || {};
     cache[entry.pageKey] = {
+      originalHtml: existing.originalHtml || entry.originalHtml || "",
+      originalCapturedAt: existing.originalCapturedAt || entry.originalCapturedAt || "",
       patches: entry.patches,
       cssVars: entry.cssVars,
       cssRules: entry.cssRules || [],
@@ -424,7 +427,19 @@
   async function clearPageCache() {
     const pageKey = getPageKey();
     const cache = await getHtmlCache();
-    delete cache[pageKey];
+    const existing = cache[pageKey];
+
+    if (existing?.originalHtml) {
+      cache[pageKey] = {
+        originalHtml: existing.originalHtml,
+        originalCapturedAt: existing.originalCapturedAt || "",
+        pageUrl: existing.pageUrl || window.location.href,
+        updatedAt: new Date().toISOString()
+      };
+    } else {
+      delete cache[pageKey];
+    }
+
     await chrome.storage.local.set({ [HTML_CACHE_KEY]: cache });
     return { ok: true, pageKey };
   }

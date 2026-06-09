@@ -9,9 +9,15 @@ const historyToggle = document.querySelector("#historyToggle");
 const historyArrow = document.querySelector("#historyArrow");
 const historyPanel = document.querySelector("#historyPanel");
 const historyList = document.querySelector("#historyList");
+const detailPane = document.querySelector("#detailPane");
+const detailText = document.querySelector("#detailText");
+const detailMode = document.querySelector("#detailMode");
+const openSettings = document.querySelector("#openSettings");
+const clearAllPopupCache = document.querySelector("#clearAllPopupCache");
 
 const TOKEN_LIMIT = 1000000;
 const CHARS_PER_TOKEN = 4;
+const HTML_CACHE_KEY = "domHtmlCache";
 const POPUP_TAB_STATE_KEY = "popupTabPromptState";
 // Modes are owned by the backend. We fetch [{key,label}] and render buttons;
 // the chosen key is sent and the backend resolves its instruction. No
@@ -89,7 +95,7 @@ function createEmptyTabState() {
 }
 
 function normalizeTabState(state = {}) {
-  return renumberVersionIndexes({
+  return renumberVersionIndexes(dedupeOriginalVersions({
     ...createEmptyTabState(),
     ...state,
     draftMode: normalizeMode(state.draftMode),
@@ -97,7 +103,7 @@ function normalizeTabState(state = {}) {
     history: Array.isArray(state.history) ? state.history.map(normalizeVersion).filter(Boolean) : [],
     nextIndex: Number.isInteger(state.nextIndex) && state.nextIndex > 0 ? state.nextIndex : 1,
     historyExpanded: Boolean(state.historyExpanded)
-  });
+  }));
 }
 
 function normalizeVersion(version) {
@@ -123,6 +129,9 @@ function normalizeMode(mode) {
   // mode list (retired/unknown) resolves to no mode.
   const legacyNumeric = { 1: "focus", 2: "modernization", 3: "mode3", 4: "mode4" };
   const key = Object.hasOwn(legacyNumeric, mode) ? legacyNumeric[mode] : mode;
+  if (!modeList.length) {
+    return key;
+  }
   return knownModeKeys().has(key) ? key : null;
 }
 
@@ -132,6 +141,68 @@ function createId() {
   }
 
   return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+}
+
+function getPageKey(url) {
+  const parsedUrl = new URL(url);
+  return `${parsedUrl.origin}${parsedUrl.pathname}`;
+}
+
+function getSiteKey(url) {
+  const parsedUrl = new URL(url);
+  if (parsedUrl.protocol === "file:") {
+    return "file:";
+  }
+
+  return parsedUrl.origin;
+}
+
+// The Story is per-page (origin + path) so /projects/ keeps its own
+// versions, separate from / on the same site — matching how the HTML
+// cache is keyed. Non-URL tabs (chrome://, new tab) fall back to tab id.
+function pageStateKey(tab) {
+  try {
+    return getPageKey(tab.url || "");
+  } catch (_error) {
+    return `tab:${tab?.id}`;
+  }
+}
+
+function isOriginalVersion(version) {
+  return version?.kind === "original";
+}
+
+function hasOriginalVersion(state) {
+  return Boolean(
+    isOriginalVersion(state.current) || (state.history || []).some((version) => isOriginalVersion(version))
+  );
+}
+
+function hasGeneratedVersion(state) {
+  return Boolean(
+    (state.current && !isOriginalVersion(state.current)) ||
+      (state.history || []).some((version) => !isOriginalVersion(version))
+  );
+}
+
+function dedupeOriginalVersions(state) {
+  let originalSeen = false;
+  const keepVersion = (version) => {
+    if (!isOriginalVersion(version)) {
+      return true;
+    }
+
+    if (originalSeen) {
+      return false;
+    }
+
+    originalSeen = true;
+    return true;
+  };
+
+  const current = state.current && keepVersion(state.current) ? state.current : null;
+  const history = (state.history || []).filter(keepVersion);
+  return { ...state, current, history };
 }
 
 function estimateTokens(text) {
@@ -369,43 +440,75 @@ function createTextElement(className, text) {
   return element;
 }
 
-function createDetailPopout(version) {
-  const detail = document.createElement("div");
-  detail.className = "detail-popout";
-
-  const prompt = version.prompt.trim();
-  const detailText = document.createElement("p");
-  detailText.className = "detail-text";
-
+function detailContentFor(version) {
+  let text = "";
   if (version.kind === "original") {
-    detailText.textContent = "Original page version captured before the first generated change.";
-    detail.append(detailText);
-  } else if (prompt) {
-    detailText.textContent = prompt;
-    detail.append(detailText);
+    text = "Original page version captured before the first generated change.";
+  } else if (version.prompt.trim()) {
+    text = version.prompt.trim();
   } else if (version.pending) {
-    detailText.textContent = "This generated version is still waiting for the API result.";
-    detail.append(detailText);
+    text = "This generated version is still waiting for the API result.";
   }
-
-  if (version.mode) {
-    const badge = document.createElement("span");
-    badge.className = "mode-badge";
-    badge.textContent = modeLabel(version.mode);
-    detail.append(badge);
-  }
-
-  return detail;
+  return { text, mode: version.mode ? modeLabel(version.mode) : "" };
 }
 
-function isRollbackable(version) {
-  const result = version?.result;
-  return Boolean(
-    result?.modifiedHtml ||
-      result?.patches?.length ||
-      Object.keys(result?.cssVars || {}).length ||
-      result?.cssRules?.length
+// Which card's detail is currently expanded in the side pane (null = closed).
+let expandedVersionId = null;
+
+function collapseDetailPane() {
+  expandedVersionId = null;
+  detailPane.classList.remove("open");
+  detailPane.setAttribute("aria-hidden", "true");
+  document
+    .querySelectorAll(".version-card.detail-active")
+    .forEach((el) => el.classList.remove("detail-active"));
+}
+
+function openDetailPane(version) {
+  const { text, mode } = detailContentFor(version);
+  if (!text && !mode) {
+    collapseDetailPane();
+    return;
+  }
+  expandedVersionId = version.id;
+  detailText.textContent = text;
+  detailMode.textContent = mode;
+  detailMode.hidden = !mode;
+  detailPane.classList.add("open");
+  detailPane.setAttribute("aria-hidden", "false");
+  document
+    .querySelectorAll(".version-card.detail-active")
+    .forEach((el) => el.classList.remove("detail-active"));
+  const card = document.querySelector(`.version-card[data-version-id="${version.id}"]`);
+  if (card) card.classList.add("detail-active");
+}
+
+// Click a card to slide the pane open; click the same card again to close.
+function toggleDetailPane(version) {
+  if (expandedVersionId === version.id) {
+    collapseDetailPane();
+  } else {
+    openDetailPane(version);
+  }
+}
+
+// After a re-render the cards are rebuilt; drop the pane if its version
+// is gone, otherwise re-mark the active card.
+function reconcileDetailPane() {
+  if (expandedVersionId === null) {
+    return;
+  }
+  const stillExists =
+    currentTabState.current?.id === expandedVersionId ||
+    (currentTabState.history || []).some((v) => v.id === expandedVersionId);
+  if (!stillExists) {
+    collapseDetailPane();
+    return;
+  }
+  const card = document.querySelector(
+    `.version-card[data-version-id="${expandedVersionId}"]`
   );
+  if (card) card.classList.add("detail-active");
 }
 
 function createVersionCard(version, placement) {
@@ -413,6 +516,7 @@ function createVersionCard(version, placement) {
   card.className = `version-card ${placement === "current" ? "current-card" : "history-card"}`;
   card.dataset.versionId = version.id;
   card.tabIndex = 0;
+  card.classList.toggle("protected-card", isOriginalVersion(version));
 
   card.append(createTextElement("version-index", `#${version.index}`));
   card.append(createTextElement("version-preview", previewVersion(version)));
@@ -427,20 +531,36 @@ function createVersionCard(version, placement) {
     rollbackButton.type = "button";
     rollbackButton.dataset.action = "rollback";
     rollbackButton.dataset.versionId = version.id;
-    rollbackButton.disabled = version.pending || !isRollbackable(version);
+    // Re-runnable as long as it isn't still pending and there's something
+    // to act on (the original, or a prompt/mode). No cached result needed.
+    const canSelect = isOriginalVersion(version) || Boolean(version.prompt || version.mode);
+    rollbackButton.disabled = version.pending || !canSelect;
     rollbackButton.textContent = "Rollback";
     card.append(rollbackButton);
   }
 
-  const deleteButton = document.createElement("button");
-  deleteButton.className = "version-action danger";
-  deleteButton.type = "button";
-  deleteButton.dataset.action = placement === "history" ? "delete-history" : "delete-current";
-  deleteButton.dataset.versionId = version.id;
-  deleteButton.textContent = "Delete";
-  card.append(deleteButton);
+  if (!isOriginalVersion(version)) {
+    const deleteButton = document.createElement("button");
+    deleteButton.className = "version-action danger";
+    deleteButton.type = "button";
+    deleteButton.dataset.action = placement === "history" ? "delete-history" : "delete-current";
+    deleteButton.dataset.versionId = version.id;
+    deleteButton.textContent = "Delete";
+    card.append(deleteButton);
+  }
 
-  card.append(createDetailPopout(version));
+  card.addEventListener("click", (event) => {
+    // Rollback / Delete buttons keep their own behaviour.
+    if (event.target.closest("button")) return;
+    toggleDetailPane(version);
+  });
+  card.addEventListener("keydown", (event) => {
+    if (event.key === "Enter" || event.key === " ") {
+      if (event.target.closest("button")) return;
+      event.preventDefault();
+      toggleDetailPane(version);
+    }
+  });
   return card;
 }
 
@@ -494,7 +614,8 @@ function renderCurrentCache() {
 function renderHistory() {
   const expanded = Boolean(currentTabState.historyExpanded);
   historyToggle.setAttribute("aria-expanded", String(expanded));
-  historyArrow.textContent = expanded ? "v" : ">";
+  historyArrow.textContent = "";
+  historyArrow.classList.toggle("expanded", expanded);
   historyPanel.hidden = !expanded;
   historyList.replaceChildren();
 
@@ -519,16 +640,70 @@ function renderHistory() {
 function renderCacheState() {
   renderCurrentCache();
   renderHistory();
+  reconcileDetailPane();
 }
 
-function createOriginalVersion(snapshotHtml) {
+async function clearCurrentSiteCache() {
+  let activeSiteKey = "";
+  try {
+    activeSiteKey = getSiteKey(activeTab?.url || "");
+  } catch (_error) {
+    activeSiteKey = "";
+  }
+
+  if (!activeSiteKey) {
+    setComposerStatus("No website cache to clear on this tab.", "error", true);
+    return;
+  }
+
+  clearAllPopupCache.disabled = true;
+  clearAllPopupCache.textContent = "Clearing...";
+
+  const data = await chrome.storage.local.get([HTML_CACHE_KEY, POPUP_TAB_STATE_KEY]);
+  const cache = data[HTML_CACHE_KEY] || {};
+  const store = data[POPUP_TAB_STATE_KEY] || {};
+
+  Object.keys(cache).forEach((pageKey) => {
+    try {
+      if (getSiteKey(cache[pageKey]?.pageUrl || pageKey) === activeSiteKey) {
+        delete cache[pageKey];
+      }
+    } catch (_error) {
+      // Ignore malformed cache keys.
+    }
+  });
+
+  Object.keys(store).forEach((stateKey) => {
+    try {
+      if (getSiteKey(stateKey) === activeSiteKey) {
+        delete store[stateKey];
+      }
+    } catch (_error) {
+      // Ignore non-URL tab fallback keys.
+    }
+  });
+
+  await chrome.storage.local.set({
+    [HTML_CACHE_KEY]: cache,
+    [POPUP_TAB_STATE_KEY]: store
+  });
+
+  currentTabState = createEmptyTabState();
+  promptInput.value = "";
+  collapseDetailPane();
+  renderCacheState();
+  clearAllPopupCache.textContent = "Clear all";
+  setComposerStatus("This site cache cleared.", "ready", true);
+}
+
+function createOriginalVersion(snapshotHtml, capturedAt = new Date(0).toISOString()) {
   return {
     id: createId(),
     index: 0,
     prompt: "",
     mode: null,
     kind: "original",
-    createdAt: new Date(0).toISOString(),
+    createdAt: capturedAt,
     result: {
       modifiedHtml: snapshotHtml,
       patches: [],
@@ -539,6 +714,87 @@ function createOriginalVersion(snapshotHtml) {
     },
     pending: false
   };
+}
+
+function cacheEntryHasGeneratedOutput(entry) {
+  return Boolean(
+    entry?.modifiedHtml ||
+      entry?.patches?.length ||
+      Object.keys(entry?.cssVars || {}).length ||
+      (entry?.cssRules || []).length
+  );
+}
+
+function createGeneratedVersionFromCache(pageEntry) {
+  return {
+    id: createId(),
+    index: 0,
+    prompt: pageEntry.sourcePrompt || "",
+    mode: normalizeMode(pageEntry.selectedMode),
+    kind: "generated",
+    createdAt: pageEntry.updatedAt || new Date().toISOString(),
+    result: {
+      modifiedHtml: pageEntry.modifiedHtml || "",
+      patches: pageEntry.patches || [],
+      cssVars: pageEntry.cssVars || {},
+      cssRules: pageEntry.cssRules || [],
+      apiResult: pageEntry.apiResult || {},
+      changesSummary: pageEntry.changesSummary || "Cached page output",
+      sourcePrompt: pageEntry.sourcePrompt || "",
+      selectedMode: normalizeMode(pageEntry.selectedMode),
+      traceId: pageEntry.traceId || ""
+    },
+    pending: false
+  };
+}
+
+async function ensureOriginalVersionFromHtmlCache(tab) {
+  if (hasOriginalVersion(currentTabState)) {
+    return false;
+  }
+
+  const data = await chrome.storage.local.get(HTML_CACHE_KEY);
+  let pageEntry = null;
+  try {
+    pageEntry = data[HTML_CACHE_KEY]?.[getPageKey(tab.url || "")];
+  } catch (_error) {
+    pageEntry = null;
+  }
+
+  if (!pageEntry?.originalHtml) {
+    return false;
+  }
+
+  currentTabState.history = [
+    createOriginalVersion(pageEntry.originalHtml, pageEntry.originalCapturedAt || new Date(0).toISOString()),
+    ...currentTabState.history
+  ];
+  currentTabState = renumberVersionIndexes(dedupeOriginalVersions(currentTabState));
+  await persistTabState();
+  return true;
+}
+
+async function ensureGeneratedVersionFromHtmlCache(tab) {
+  if (hasGeneratedVersion(currentTabState)) {
+    return false;
+  }
+
+  const data = await chrome.storage.local.get(HTML_CACHE_KEY);
+  let pageEntry = null;
+  try {
+    pageEntry = data[HTML_CACHE_KEY]?.[getPageKey(tab.url || "")];
+  } catch (_error) {
+    pageEntry = null;
+  }
+
+  if (!cacheEntryHasGeneratedOutput(pageEntry)) {
+    return false;
+  }
+
+  currentTabState.current = createGeneratedVersionFromCache(pageEntry);
+  currentTabState = renumberVersionIndexes(dedupeOriginalVersions(currentTabState));
+  await persistTabState();
+  return true;
 }
 
 async function saveGeneratedVersion(prompt, mode, snapshotHtml) {
@@ -558,7 +814,7 @@ async function saveGeneratedVersion(prompt, mode, snapshotHtml) {
     ? [currentTabState.current, ...currentTabState.history]
     : currentTabState.history;
 
-  if (!currentTabState.current && !currentTabState.history.length) {
+  if (!hasOriginalVersion(currentTabState)) {
     history = [createOriginalVersion(snapshotHtml), ...history];
   }
 
@@ -577,6 +833,10 @@ async function saveGeneratedVersion(prompt, mode, snapshotHtml) {
 }
 
 async function deleteCurrentVersion() {
+  if (isOriginalVersion(currentTabState.current)) {
+    throw new Error("Original save is protected.");
+  }
+
   currentTabState.current = null;
   currentTabState = renumberVersionIndexes(currentTabState);
   renderCacheState();
@@ -584,56 +844,157 @@ async function deleteCurrentVersion() {
 }
 
 async function deleteHistoryVersion(versionId) {
+  const selected = currentTabState.history.find((version) => version.id === versionId);
+
+  if (isOriginalVersion(selected)) {
+    throw new Error("Original save is protected.");
+  }
+
   currentTabState.history = currentTabState.history.filter((version) => version.id !== versionId);
   currentTabState = renumberVersionIndexes(currentTabState);
   renderCacheState();
   await persistTabState();
 }
 
+// Rollback strategy, in priority order:
+//   1. Original version → clear the page cache and reload the untouched site.
+//   2. Version with a cached result → restore it via the background
+//      ROLLBACK_TO_VERSION path (cache the result + reload; the content
+//      script re-applies patches/css on the live page). This is the same
+//      CSP-safe apply path a fresh generation uses, but costs no tokens.
+//   3. No cached result → fall back to re-capturing the LIVE page and
+//      re-running the version's prompt/mode through the normal pipeline
+//      (the same path the Generate button uses).
+// Replaying a stale full-DOM snapshot directly is intentionally avoided;
+// the cache path applies surgical patches, not a script-reinjecting blob.
 async function rollbackVersion(versionId) {
   const selected = currentTabState.history.find((version) => version.id === versionId);
   if (!selected) {
     return;
   }
 
-  if (!isRollbackable(selected)) {
-    throw new Error("This version is not ready yet.");
+  const tab = activeTab || (await getActiveTab());
+  await ensureContentScript(tab);
+
+  // The original has no prompt to re-run; "the real one" for it is the
+  // genuine untouched page. Clear the page's mutable cache and reload so
+  // the site loads with no patches applied (no stale snapshot replay).
+  if (isOriginalVersion(selected)) {
+    await sendTabMessage(tab.id, { type: "CLEAR_PAGE_CACHE" });
+
+    // Keep the previously-current modified version in the Story — only the
+    // live page resets to original, the saved versions must survive.
+    const remaining = currentTabState.history.filter((version) => version.id !== versionId);
+    const history = currentTabState.current
+      ? [currentTabState.current, ...remaining]
+      : remaining;
+    currentTabState.current = selected;
+    currentTabState.history = sortHistory(history);
+    currentTabState = renumberVersionIndexes(currentTabState);
+    renderCacheState();
+    await persistTabState();
+    await chrome.tabs.reload(tab.id);
+    return;
   }
 
-  const previousState = normalizeTabState(JSON.parse(JSON.stringify(currentTabState)));
+  // If this version already has a usable cached result, restore it directly
+  // instead of re-running the model. This is the SAME apply path a fresh
+  // generation uses (background caches the result, the tab reloads, the
+  // content script applies patches/css on the live page) — so it's just as
+  // CSP-safe as a normal generation, but free: no API call, no tokens spent.
+  // Re-running is only worthwhile when there's no cached output to restore.
+  if (cacheEntryHasGeneratedOutput(selected.result)) {
+    const restore = await sendRuntimeMessage(
+      {
+        type: "ROLLBACK_TO_VERSION",
+        payload: { tabId: tab.id, pageUrl: tab.url, version: selected }
+      },
+      7000
+    );
 
-  const remaining = currentTabState.history.filter((version) => version.id !== versionId);
-  const history = currentTabState.current ? [currentTabState.current, ...remaining] : remaining;
+    if (restore?.status === "error") {
+      throw new Error(restore.error?.message || "Could not restore this version.");
+    }
+    if (!restore?.ok) {
+      throw new Error("Background worker did not restore the version.");
+    }
 
-  currentTabState.current = selected;
-  currentTabState.history = sortHistory(history);
-  currentTabState = renumberVersionIndexes(currentTabState);
-  renderCacheState();
-  await persistTabState();
+    // Make the restored version current and push the previously-current one
+    // back into history — mirror the original-version branch so the Story
+    // reflects reality instead of spawning a new box.
+    const remaining = currentTabState.history.filter((version) => version.id !== versionId);
+    const history = currentTabState.current
+      ? [currentTabState.current, ...remaining]
+      : remaining;
+    currentTabState.current = selected;
+    currentTabState.history = sortHistory(history);
+    currentTabState = renumberVersionIndexes(currentTabState);
+    renderCacheState();
+    await persistTabState();
+    setComposerStatus("Restored this version from cache — no tokens used.", "ready", true);
+    return;
+  }
 
-  const tab = activeTab || (await getActiveTab());
-  const response = await sendRuntimeMessage(
+  if (!selected.prompt && !selected.mode) {
+    throw new Error("This version has no prompt to re-run.");
+  }
+
+  const snapshot = await sendTabMessage(tab.id, { type: "CAPTURE_PAGE_HTML" });
+  if (snapshot.error) {
+    throw new Error(snapshot.error);
+  }
+  if (resolveTokens(snapshot) > TOKEN_LIMIT) {
+    throw new Error("This page is too large to send.");
+  }
+
+  // Don't let the shared save helper wipe the in-progress composer state.
+  // The prompt draft and the selected mode are independent: a user can have
+  // a mode chosen with no typed text, so each must be restored on its own —
+  // gating the mode restore behind a non-empty draft silently erased it.
+  const keptDraft = promptInput.value;
+  const keptMode = selectedMode;
+
+  const newVersionId = await saveGeneratedVersion(selected.prompt, selected.mode, snapshot.html);
+
+  if (keptDraft) {
+    promptInput.value = keptDraft;
+    currentTabState.draftPrompt = keptDraft;
+  }
+  // Always re-apply the composer mode (independent of the prompt draft) so the
+  // selection and its button UI survive the rollback re-run. setSelectedMode
+  // also persists draftMode and schedules the draft save for us.
+  setSelectedMode(keptMode);
+
+  const handoff = await sendRuntimeMessage(
     {
-      type: "ROLLBACK_TO_VERSION",
+      type: "START_PROCESS",
       payload: {
         tabId: tab.id,
-        pageUrl: tab.url,
-        version: selected
+        pageUrl: snapshot.pageUrl,
+        html: snapshot.html,
+        promptVersionId: newVersionId,
+        tabStateKey: activeTabKey,
+        user_prompt: selected.prompt,
+        selected_mode: selected.mode || null,
+        params: {}
       }
     },
     7000
   );
 
-  if (!response?.ok) {
-    currentTabState = previousState;
-    renderCacheState();
-    await persistTabState();
-    throw new Error(response?.error?.message || "Could not roll back page.");
+  if (!handoff?.started) {
+    throw new Error("Background worker did not start the job.");
   }
+
+  setComposerStatus("Re-running this prompt on the live page…", "ready", true);
 }
 
 chrome.storage.onChanged.addListener((changes, areaName) => {
-  if (areaName !== "local" || !changes[POPUP_TAB_STATE_KEY] || !activeTabKey) {
+  if (areaName !== "local") {
+    return;
+  }
+
+  if (!changes[POPUP_TAB_STATE_KEY] || !activeTabKey) {
     return;
   }
 
@@ -667,11 +1028,13 @@ function renderTabHeader(tab) {
 
 async function loadTabState(tab) {
   activeTab = tab;
-  activeTabKey = String(tab.id);
+  activeTabKey = pageStateKey(tab);
   renderTabHeader(tab);
 
   const store = await getPopupStore();
   currentTabState = normalizeTabState(store[activeTabKey]);
+  await ensureOriginalVersionFromHtmlCache(tab);
+  await ensureGeneratedVersionFromHtmlCache(tab);
   promptInput.value = currentTabState.draftPrompt;
   setSelectedMode(currentTabState.draftMode, false);
   renderCacheState();
@@ -689,6 +1052,19 @@ historyToggle.addEventListener("click", async () => {
   currentTabState.historyExpanded = !currentTabState.historyExpanded;
   renderHistory();
   await persistTabState();
+});
+
+openSettings.addEventListener("click", async () => {
+  await chrome.tabs.create({ url: chrome.runtime.getURL("options/options.html") });
+  window.close();
+});
+
+clearAllPopupCache.addEventListener("click", () => {
+  clearCurrentSiteCache().catch((error) => {
+    clearAllPopupCache.disabled = false;
+    clearAllPopupCache.textContent = "Clear all";
+    setComposerStatus(error.message || "Could not clear cache.", "error", true);
+  });
 });
 
 currentCache.addEventListener("click", (event) => {
@@ -780,11 +1156,14 @@ applyPrompt.addEventListener("click", async () => {
 
 (async () => {
   try {
-    // Render modes (from the backend) before restoring tab state so a
-    // persisted mode selection can be re-applied to real buttons.
-    await loadModes();
     const tab = await getActiveTab();
     await loadTabState(tab);
+    loadModes().catch((error) => {
+      setComposerStatus(
+        `Couldn't load modes: ${error.message || "API unreachable"}.`,
+        "error"
+      );
+    });
   } catch (error) {
     setComposerStatus(error.message || "Could not initialize popup.", "error");
   }
