@@ -80,5 +80,3 @@ def decompress_html(emmet: str) -> str:
     except Exception as e:
         logger.error(f"Emmet decompression failed: {e}")
         return emmet
-
-# Made with Bob

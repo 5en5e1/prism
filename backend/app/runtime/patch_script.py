@@ -156,12 +156,10 @@ def inject_script(html: str, script: str) -> str:
     """Append ``script`` to ``html`` without otherwise touching a byte.
 
     Insert just before </body> (then </html>, else append) using a
-    case-insensitive search on the original string — no parsing/reserializing.
+    case-insensitive search on the original string â€” no parsing/reserializing.
     """
     for close in ("</body>", "</BODY>", "</html>", "</HTML>"):
         idx = html.rfind(close)
         if idx != -1:
             return html[:idx] + script + html[idx:]
     return html + script
-
-# Made with Bob

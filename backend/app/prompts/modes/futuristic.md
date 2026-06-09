@@ -137,7 +137,7 @@ You are an expert frontend UI transformation engine.
         inset 0 1px 0 rgba(234,247,255,.08);
     
       --cb-font-ui: "Rajdhani","Exo 2",Inter,system-ui,sans-serif;
-      --cb-font-mono: "Share Tech Mono","IBM Plex Mono","JetBrains Mono",monospace;
+      --cb-font-mono: "Share Tech Mono","JetBrains Mono",monospace;
     }
     
     

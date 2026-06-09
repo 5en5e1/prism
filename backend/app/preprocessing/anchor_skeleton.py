@@ -132,10 +132,10 @@ def extract_css_context(soup: BeautifulSoup, char_budget: int = 24_000) -> str:
             continue
         remaining = char_budget - used
         if remaining <= 0:
-            css_parts.append("/* … additional <style> rules omitted */")
+            css_parts.append("/* â€¦ additional <style> rules omitted */")
             break
         if len(css) > remaining:
-            css = css[:remaining] + " /* …truncated */"
+            css = css[:remaining] + " /* â€¦truncated */"
         css_parts.append(css)
         used += len(css)
     if css_parts:
@@ -210,7 +210,7 @@ def _signature(tag: Tag) -> tuple:
 def _truncate(value: str, limit: int) -> str:
     value = " ".join(value.split())
     if len(value) > limit:
-        return value[: limit - 1] + "…"
+        return value[: limit - 1] + "â€¦"
     return value
 
 
@@ -219,7 +219,7 @@ def _render_attrs(tag: Tag, p: "SkeletonProfile") -> str:
     classes = _norm_classes(tag)
     if classes:
         shown = classes[: p.max_classes]
-        suffix = "…" if len(classes) > p.max_classes else ""
+        suffix = "â€¦" if len(classes) > p.max_classes else ""
         parts.append("." + ".".join(shown) + suffix)
     el_id = tag.get("id")
     if isinstance(el_id, str) and el_id:
@@ -341,7 +341,7 @@ def build_anchored_skeleton(
         if used_chars + len(line) + 1 > budget_chars:
             state["truncated"] = True
             lines.append(
-                f"{indent}… (skeleton truncated: page exceeds token budget)"
+                f"{indent}â€¦ (skeleton truncated: page exceeds token budget)"
             )
             return
         used_chars += len(line) + 1
@@ -390,7 +390,7 @@ def build_anchored_skeleton(
                     ids = [int(h.get(ANCHOR_ATTR, "0")) for h in hidden]
                     child_indent = " " * min(depth + 1, _INDENT_CAP)
                     lines.append(
-                        f"{child_indent}… +{len(hidden)} more <{sig[0]}> "
+                        f"{child_indent}â€¦ +{len(hidden)} more <{sig[0]}> "
                         f"like @{run[0].get(ANCHOR_ATTR, '?')} "
                         f"(anchors @{min(ids)}..@{max(ids)})"
                     )
@@ -440,5 +440,3 @@ def strip_anchors(soup: BeautifulSoup) -> None:
     for el in soup.find_all(attrs={ANCHOR_ATTR: True}):
         if isinstance(el, Tag):
             del el[ANCHOR_ATTR]
-
-# Made with Bob

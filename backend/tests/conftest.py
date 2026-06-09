@@ -47,5 +47,3 @@ def sample_html():
     </body>
     </html>
     """
-
-# Made with Bob

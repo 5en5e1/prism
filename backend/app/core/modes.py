@@ -39,7 +39,7 @@ def _humanize(key: str) -> str:
 def _split_label_and_body(raw: str, key: str) -> tuple[str, str]:
     """An optional leading ``# Label`` line names the mode; the rest is the
     instruction body. No heading -> label derived from the key."""
-    text = raw.lstrip("﻿").strip()
+    text = raw.lstrip("ï»¿").strip()
     if not text:
         return _humanize(key), ""
     first, _, rest = text.partition("\n")
@@ -112,5 +112,3 @@ def compose_prompt(mode: str | None, user_prompt: str | None) -> str:
     if base and user:
         return f"{base}\n\n{_CUSTOMIZATION_HEADER}\n{user}"
     return base or user
-
-# Made with Bob

@@ -153,7 +153,7 @@ You are an expert frontend UI transformation engine.
       --mw-shadow-lg: 0 24px 70px rgba(24,24,27,.14);
     
       --mw-font-sans: Inter, Geist, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --mw-font-mono: "JetBrains Mono", "IBM Plex Mono", ui-monospace, SFMono-Regular, monospace;
+      --mw-font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, monospace;
     }
     
     

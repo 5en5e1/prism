@@ -108,5 +108,3 @@ async def with_retry(
     if last_exception:
         raise last_exception
     raise RuntimeError("Retry logic failed unexpectedly")
-
-# Made with Bob

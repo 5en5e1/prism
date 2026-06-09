@@ -137,5 +137,3 @@ class AIClient:
     async def close(self) -> None:
         """Close the client connection."""
         await self.client.close()
-
-# Made with Bob

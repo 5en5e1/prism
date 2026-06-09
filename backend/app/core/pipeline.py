@@ -186,5 +186,3 @@ class Pipeline:
                     "stage": "unknown",
                 },
             )
-
-# Made with Bob

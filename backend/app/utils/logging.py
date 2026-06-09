@@ -25,5 +25,3 @@ class JSONFormatter(logging.Formatter):
             log_data["exception"] = self.formatException(record.exc_info)
 
         return json.dumps(log_data)
-
-# Made with Bob

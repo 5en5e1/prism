@@ -67,7 +67,7 @@ async def process_request(
     )
     if not effective_prompt.strip():
         # Mode selected but its instruction is still blank and no user
-        # prompt — nothing actionable to send.
+        # prompt â€” nothing actionable to send.
         return ProcessResponse(
             trace_id=trace_id,
             use_case=USE_CASE,
@@ -137,5 +137,3 @@ async def get_modes() -> dict:
     """Modes for the extension to render. Keys + labels only, no
     instruction text (the backend resolves that from the chosen key)."""
     return {"modes": list_modes()}
-
-# Made with Bob

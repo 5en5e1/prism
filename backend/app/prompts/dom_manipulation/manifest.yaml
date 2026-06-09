@@ -9,5 +9,3 @@ versions:
     temperature: 0.2
     response_format: json_schema
     schema_ref: schemas.dom_manipulation.DOMManipulationResult
-
-# Made with Bob

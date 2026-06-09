@@ -66,5 +66,3 @@ def extract_skeleton(html: str, max_depth: int = 3) -> str:
         truncate_deep_branches(soup, 0)
 
     return str(soup)
-
-# Made with Bob

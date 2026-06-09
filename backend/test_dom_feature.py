@@ -20,7 +20,7 @@ async def test_dom_manipulation():
     sample_html_path = Path(__file__).parent / "tests" / "fixtures" / "sample.html"
     
     if not sample_html_path.exists():
-        print(f"❌ Error: Sample HTML not found at {sample_html_path}")
+        print(f"âŒ Error: Sample HTML not found at {sample_html_path}")
         return 1
     
     with open(sample_html_path, "r") as f:
@@ -44,16 +44,16 @@ async def test_dom_manipulation():
         }
     }
     
-    print("📄 Input HTML:")
+    print("ðŸ“„ Input HTML:")
     print(f"   File: {sample_html_path}")
     print(f"   Size: {len(html_content)} bytes")
     print()
     
-    print("💬 User Prompt:")
+    print("ðŸ’¬ User Prompt:")
     print(f'   "{request_data["user_prompt"]}"')
     print()
     
-    print("🚀 Sending request to backend...")
+    print("ðŸš€ Sending request to backend...")
     print(f"   Endpoint: POST {base_url}/api/v1/process")
     print()
     
@@ -64,21 +64,21 @@ async def test_dom_manipulation():
                 json=request_data
             )
             
-            print(f"📊 Response Status: {response.status_code}")
+            print(f"ðŸ“Š Response Status: {response.status_code}")
             print()
             
             if response.status_code != 200:
-                print(f"❌ Error: Request failed with status {response.status_code}")
+                print(f"âŒ Error: Request failed with status {response.status_code}")
                 print(f"Response: {response.text}")
                 return 1
             
             data = response.json()
             
             # Print response details
-            print("✅ Response received successfully!")
+            print("âœ… Response received successfully!")
             print()
             
-            print("🔍 Response Details:")
+            print("ðŸ” Response Details:")
             print(f"   Trace ID: {data.get('trace_id')}")
             print(f"   Use Case: {data.get('use_case')}")
             print(f"   Status: {data.get('status')}")
@@ -87,7 +87,7 @@ async def test_dom_manipulation():
             # Check for errors
             if data.get("status") == "error":
                 error = data.get("error", {})
-                print(f"❌ Error occurred:")
+                print(f"âŒ Error occurred:")
                 print(f"   Code: {error.get('code')}")
                 print(f"   Message: {error.get('message')}")
                 print(f"   Stage: {error.get('stage')}")
@@ -97,7 +97,7 @@ async def test_dom_manipulation():
             # Print warnings if any
             warnings = data.get("warnings", [])
             if warnings:
-                print("⚠️  Warnings:")
+                print("âš ï¸  Warnings:")
                 for warning in warnings:
                     print(f"   - {warning}")
                 print()
@@ -105,7 +105,7 @@ async def test_dom_manipulation():
             # Print usage statistics
             usage = data.get("usage")
             if usage:
-                print("📈 Token Usage:")
+                print("ðŸ“ˆ Token Usage:")
                 print(f"   Input Tokens: {usage.get('input_tokens')}")
                 print(f"   Output Tokens: {usage.get('output_tokens')}")
                 print(f"   Model: {usage.get('model')}")
@@ -114,7 +114,7 @@ async def test_dom_manipulation():
             # Print timing information
             timing = data.get("timing_ms")
             if timing:
-                print("⏱️  Timing (milliseconds):")
+                print("â±ï¸  Timing (milliseconds):")
                 print(f"   Preprocessing: {timing.get('preprocess_ms'):.2f}ms")
                 print(f"   AI Call: {timing.get('ai_ms'):.2f}ms")
                 print(f"   Postprocessing: {timing.get('postprocess_ms'):.2f}ms")
@@ -125,11 +125,11 @@ async def test_dom_manipulation():
             result = data.get("result", {})
             patches = result.get("patches", [])
             
-            print(f"🔧 Generated Patch Operations: {len(patches)}")
+            print(f"ðŸ”§ Generated Patch Operations: {len(patches)}")
             print()
             
             if not patches:
-                print("   ⚠️  No patch operations generated!")
+                print("   âš ï¸  No patch operations generated!")
                 print("   This might indicate the AI didn't understand the prompt")
                 print("   or couldn't find the sidebar element.")
             else:
@@ -165,7 +165,7 @@ async def test_dom_manipulation():
                     print()
             
             # Print metadata
-            print("📋 Metadata:")
+            print("ðŸ“‹ Metadata:")
             print(f"   Element Count: {result.get('element_count')}")
             print(f"   Skeletonization Applied: {result.get('applied_skeletonization')}")
             print()
@@ -175,23 +175,23 @@ async def test_dom_manipulation():
             with open(output_file, "w") as f:
                 json.dump(data, f, indent=2)
             
-            print(f"💾 Full response saved to: {output_file}")
+            print(f"ðŸ’¾ Full response saved to: {output_file}")
             print()
             
             print("=" * 80)
-            print("✅ TEST COMPLETED SUCCESSFULLY")
+            print("âœ… TEST COMPLETED SUCCESSFULLY")
             print("=" * 80)
             
             return 0
     
     except httpx.ConnectError:
-        print("❌ Error: Could not connect to backend server")
+        print("âŒ Error: Could not connect to backend server")
         print("   Make sure the server is running at http://localhost:8000")
         print("   Start it with: python -m uvicorn app.main:app --reload")
         return 1
     
     except Exception as e:
-        print(f"❌ Error: {type(e).__name__}: {e}")
+        print(f"âŒ Error: {type(e).__name__}: {e}")
         import traceback
         traceback.print_exc()
         return 1
@@ -199,5 +199,3 @@ async def test_dom_manipulation():
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(test_dom_manipulation()))
-
-# Made with Bob

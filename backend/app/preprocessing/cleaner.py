@@ -123,5 +123,3 @@ def strip_large_text_nodes(soup: BeautifulSoup, max_length: int = 80) -> None:
             if parent and parent.name not in ["script", "style"]:
                 placeholder = f"[text:{len(element.strip())} chars]"
                 element.replace_with(placeholder)
-
-# Made with Bob

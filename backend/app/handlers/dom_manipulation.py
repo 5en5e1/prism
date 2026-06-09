@@ -246,5 +246,3 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
             original_size=context.original_size,
             modified_size=len(modified_html),
         )
-
-# Made with Bob

@@ -42,13 +42,13 @@ class ValidationReport:
         """Record a passing test."""
         self.tests_run += 1
         self.tests_passed += 1
-        print(f"{Colors.GREEN}✓ PASS{Colors.RESET}: {test_name}")
+        print(f"{Colors.GREEN}âœ“ PASS{Colors.RESET}: {test_name}")
     
     def record_fail(self, test_name: str, expected: str, received: str, severity: str, hypothesis: str):
         """Record a failing test."""
         self.tests_run += 1
         self.tests_failed += 1
-        print(f"{Colors.RED}✗ FAIL{Colors.RESET}: {test_name}")
+        print(f"{Colors.RED}âœ— FAIL{Colors.RESET}: {test_name}")
         self.findings.append({
             "test": test_name,
             "expected": expected,
@@ -60,7 +60,7 @@ class ValidationReport:
     def add_architecture_issue(self, issue: str):
         """Record an architecture conformance issue."""
         self.architecture_issues.append(issue)
-        print(f"{Colors.YELLOW}⚠ ARCHITECTURE{Colors.RESET}: {issue}")
+        print(f"{Colors.YELLOW}âš  ARCHITECTURE{Colors.RESET}: {issue}")
     
     def print_summary(self):
         """Print final validation report."""
@@ -93,9 +93,9 @@ class ValidationReport:
         if self.architecture_issues:
             print(f"\n{Colors.BOLD}Architecture Conformance Issues:{Colors.RESET}")
             for issue in self.architecture_issues:
-                print(f"  • {issue}")
+                print(f"  â€¢ {issue}")
         else:
-            print(f"\n{Colors.GREEN}✓ No architecture conformance issues detected{Colors.RESET}")
+            print(f"\n{Colors.GREEN}âœ“ No architecture conformance issues detected{Colors.RESET}")
         
         print(f"\n{Colors.BOLD}{'='*80}{Colors.RESET}\n")
 
@@ -121,7 +121,7 @@ async def check_server_reachable(base_url: str, report: ValidationReport) -> boo
                 )
                 return False
     except Exception as e:
-        print(f"{Colors.RED}✗ CRITICAL{Colors.RESET}: Server unreachable - {e}")
+        print(f"{Colors.RED}âœ— CRITICAL{Colors.RESET}: Server unreachable - {e}")
         return False
 
 
@@ -668,5 +668,3 @@ async def main():
 
 if __name__ == "__main__":
     sys.exit(asyncio.run(main()))
-
-# Made with Bob

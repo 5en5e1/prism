@@ -92,5 +92,3 @@ class ProcessResponse(BaseModel):
     usage: UsageInfo | None = Field(None, description="Token usage information")
     timing_ms: TimingInfo | None = Field(None, description="Timing breakdown")
     error: ErrorDetail | None = Field(None, description="Error details if status is error")
-
-# Made with Bob

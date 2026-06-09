@@ -68,5 +68,3 @@ class TraceLogger:
 def get_logger(name: str) -> TraceLogger:
     """Get a trace-aware logger."""
     return TraceLogger(name)
-
-# Made with Bob

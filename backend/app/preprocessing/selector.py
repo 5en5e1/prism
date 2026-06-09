@@ -83,5 +83,3 @@ def compute_unique_ids(soup) -> set[str]:
             if isinstance(i, str) and i:
                 seen[i] = seen.get(i, 0) + 1
     return {k for k, n in seen.items() if n == 1}
-
-# Made with Bob

@@ -152,5 +152,3 @@ def get_prompt_loader() -> PromptLoader:
         _prompt_loader = PromptLoader()
         _prompt_loader.load_all_manifests()
     return _prompt_loader
-
-# Made with Bob

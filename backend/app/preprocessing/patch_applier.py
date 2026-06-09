@@ -281,5 +281,3 @@ def _place(ref: Tag, nodes: list[Any], position: str) -> None:
     elif position == "append":
         for n in nodes:
             ref.append(n)
-
-# Made with Bob

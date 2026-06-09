@@ -49,5 +49,3 @@ def list_handlers() -> list[str]:
 def is_handler_registered(name: str) -> bool:
     """Check if a handler is registered."""
     return name in _handler_registry
-
-# Made with Bob

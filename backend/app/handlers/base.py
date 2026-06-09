@@ -144,5 +144,3 @@ class Handler(ABC, Generic[RequestT, ResponseT]):
             PostprocessError: If postprocessing fails
         """
         pass
-
-# Made with Bob

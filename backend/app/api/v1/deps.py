@@ -28,5 +28,3 @@ async def get_current_user() -> dict[str, Any]:
         Anonymous user dict
     """
     return {"user_id": "anonymous", "authenticated": False}
-
-# Made with Bob

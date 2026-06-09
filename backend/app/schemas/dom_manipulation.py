@@ -301,5 +301,3 @@ class DOMManipulationRequest(BaseModel):
     html: str
     user_prompt: str
     params: DOMManipulationParams = Field(default_factory=DOMManipulationParams)
-
-# Made with Bob

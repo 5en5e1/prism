@@ -45,22 +45,22 @@ async def test_css_enhancement():
         params={}
     )
     
-    print(f"\n📄 Input HTML length: {len(html)} chars")
-    print(f"📝 User prompt: {request.user_prompt}")
+    print(f"\nðŸ“„ Input HTML length: {len(html)} chars")
+    print(f"ðŸ“ User prompt: {request.user_prompt}")
     
     # Preprocess
-    print("\n🔄 Preprocessing HTML...")
+    print("\nðŸ”„ Preprocessing HTML...")
     context = await handler.preprocess(html, request)
-    print(f"   ✅ Processed HTML length: {len(context.processed_html)} chars")
-    print(f"   ✅ Element count: {len(context.element_id_map)}")
+    print(f"   âœ… Processed HTML length: {len(context.processed_html)} chars")
+    print(f"   âœ… Element count: {len(context.element_id_map)}")
     
     # Build messages
-    print("\n💬 Building AI messages...")
+    print("\nðŸ’¬ Building AI messages...")
     messages = await handler.build_messages(context, request, request.user_prompt)
-    print(f"   ✅ Created {len(messages)} messages")
+    print(f"   âœ… Created {len(messages)} messages")
     
     # Simulate AI response (we'll create a mock response)
-    print("\n🤖 Simulating AI response...")
+    print("\nðŸ¤– Simulating AI response...")
     # Find the sidebar element ID from element map
     sidebar_elem_id = None
     body_elem_id = None
@@ -75,7 +75,7 @@ async def test_css_enhancement():
     if sidebar_elem_id:
         sidebar_selector = f"[data-element-id='{sidebar_elem_id}']"
     else:
-        print("   ⚠️  Warning: Could not find sidebar in element map, using CSS fallback")
+        print("   âš ï¸  Warning: Could not find sidebar in element map, using CSS fallback")
         sidebar_selector = "aside.sidebar"
     
     if body_elem_id:
@@ -104,17 +104,17 @@ async def test_css_enhancement():
     })
     
     # Parse response
-    print("\n📊 Parsing AI response...")
+    print("\nðŸ“Š Parsing AI response...")
     parsed = await handler.parse_response(mock_ai_response, context)
-    print(f"   ✅ Parsed {len(parsed.patches)} patches")
+    print(f"   âœ… Parsed {len(parsed.patches)} patches")
     for i, patch in enumerate(parsed.patches, 1):
         print(f"   {i}. {patch.op}: {getattr(patch, 'element_id', 'N/A')}")
     
     # Postprocess (this is where CSS enhancement happens)
-    print("\n🎨 Postprocessing (CSS enhancement)...")
+    print("\nðŸŽ¨ Postprocessing (CSS enhancement)...")
     result = await handler.postprocess(parsed, context)
     
-    print(f"\n✅ Final result has {len(result.patches)} patches:")
+    print(f"\nâœ… Final result has {len(result.patches)} patches:")
     for i, patch in enumerate(result.patches, 1):
         patch_dict = patch.dict()
         print(f"\n{i}. Operation: {patch_dict['op']}")
@@ -139,10 +139,10 @@ async def test_css_enhancement():
     
     print("\n" + "=" * 80)
     if has_css_patch:
-        print("✅ SUCCESS: LLM-generated CSS positioning patch found!")
+        print("âœ… SUCCESS: LLM-generated CSS positioning patch found!")
         print("   (Note: CSS is now LLM's responsibility, not backend enhancement)")
     else:
-        print("❌ FAILURE: No CSS positioning patch found")
+        print("âŒ FAILURE: No CSS positioning patch found")
         print("   (This would mean the LLM didn't generate CSS when it should have)")
     print("=" * 80)
     
@@ -151,5 +151,3 @@ async def test_css_enhancement():
 
 if __name__ == "__main__":
     asyncio.run(test_css_enhancement())
-
-# Made with Bob

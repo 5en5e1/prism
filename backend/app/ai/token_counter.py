@@ -95,5 +95,3 @@ def truncate_to_token_limit(text: str, max_tokens: int, model: str = "gpt-4o") -
         logger.warning(f"Failed to truncate with tiktoken: {e}, using character-based")
         max_chars = max_tokens * 4
         return text[:max_chars]
-
-# Made with Bob

@@ -39,5 +39,3 @@ def test_skeletonize_html():
     
     assert "[text:" in skeletonized
     assert long_text not in skeletonized
-
-# Made with Bob

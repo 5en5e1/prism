@@ -63,7 +63,7 @@ class PatchApplicator:
         """
         if preprocess:
             html, self.element_id_map = add_element_ids(html)
-            print(f"   ℹ️  Added {len(self.element_id_map)} element IDs during preprocessing")
+            print(f"   â„¹ï¸  Added {len(self.element_id_map)} element IDs during preprocessing")
         
         self.soup = BeautifulSoup(html, 'lxml')
     
@@ -74,7 +74,7 @@ class PatchApplicator:
         Args:
             patches: List of patch operations
         """
-        print(f"\n📝 Applying {len(patches)} patch operations...")
+        print(f"\nðŸ“ Applying {len(patches)} patch operations...")
         
         for i, patch in enumerate(patches, 1):
             op = patch.get('op')
@@ -100,12 +100,12 @@ class PatchApplicator:
                 elif op == 'unwrap':
                     self._apply_unwrap(patch)
                 else:
-                    print(f"   ⚠️  Unknown operation: {op}")
+                    print(f"   âš ï¸  Unknown operation: {op}")
                 
-                print(f"   ✅ Applied successfully")
+                print(f"   âœ… Applied successfully")
             
             except Exception as e:
-                print(f"   ❌ Error: {e}")
+                print(f"   âŒ Error: {e}")
         
         return str(self.soup)
     
@@ -301,17 +301,17 @@ async def test_full_workflow():
     # Read sample HTML
     sample_path = Path(__file__).parent / "tests" / "fixtures" / "sample.html"
     if not sample_path.exists():
-        print(f"❌ Error: {sample_path} not found")
+        print(f"âŒ Error: {sample_path} not found")
         return 1
     
     with open(sample_path, 'r') as f:
         original_html = f.read()
     
-    print(f"\n📄 Input: {sample_path}")
+    print(f"\nðŸ“„ Input: {sample_path}")
     print(f"   Size: {len(original_html)} bytes")
     
     # Call backend API
-    print("\n🚀 Calling backend API...")
+    print("\nðŸš€ Calling backend API...")
     request_data = {
         "use_case": "dom_manipulation",
         "page_url": "https://example.com/test",
@@ -328,26 +328,26 @@ async def test_full_workflow():
             )
             
             if response.status_code != 200:
-                print(f"❌ API Error: {response.status_code}")
+                print(f"âŒ API Error: {response.status_code}")
                 print(response.text)
                 return 1
             
             data = response.json()
             
             if data.get('status') == 'error':
-                print(f"❌ Backend Error: {data.get('error')}")
+                print(f"âŒ Backend Error: {data.get('error')}")
                 return 1
             
-            print("✅ API call successful")
+            print("âœ… API call successful")
             
             # Get patches
             result = data.get('result', {})
             patches = result.get('patches', [])
             
-            print(f"\n📋 Received {len(patches)} patch operations")
+            print(f"\nðŸ“‹ Received {len(patches)} patch operations")
             
             if not patches:
-                print("⚠️  No patches to apply")
+                print("âš ï¸  No patches to apply")
                 return 0
             
             # Apply patches
@@ -359,7 +359,7 @@ async def test_full_workflow():
             with open(output_path, 'w') as f:
                 f.write(modified_html)
             
-            print(f"\n💾 Modified HTML saved to: {output_path}")
+            print(f"\nðŸ’¾ Modified HTML saved to: {output_path}")
             print(f"   Size: {len(modified_html)} bytes")
             
             # Save patches JSON
@@ -367,21 +367,21 @@ async def test_full_workflow():
             with open(patches_path, 'w') as f:
                 json.dump(patches, f, indent=2)
             
-            print(f"💾 Patches saved to: {patches_path}")
+            print(f"ðŸ’¾ Patches saved to: {patches_path}")
             
             print("\n" + "=" * 80)
-            print("✅ TEST COMPLETED SUCCESSFULLY")
+            print("âœ… TEST COMPLETED SUCCESSFULLY")
             print("=" * 80)
             print(f"\nOpen {output_path} in a browser to see the result!")
             
             return 0
     
     except httpx.ConnectError:
-        print("❌ Error: Could not connect to backend")
+        print("âŒ Error: Could not connect to backend")
         print("   Make sure server is running: python -m uvicorn app.main:app --reload")
         return 1
     except Exception as e:
-        print(f"❌ Error: {e}")
+        print(f"âŒ Error: {e}")
         import traceback
         traceback.print_exc()
         return 1
@@ -394,12 +394,12 @@ def apply_from_files(input_path: str, patches_path: str, output_path: str):
     print("=" * 80)
     
     # Read input HTML
-    print(f"\n📄 Reading HTML from: {input_path}")
+    print(f"\nðŸ“„ Reading HTML from: {input_path}")
     with open(input_path, 'r') as f:
         html = f.read()
     
     # Read patches
-    print(f"📋 Reading patches from: {patches_path}")
+    print(f"ðŸ“‹ Reading patches from: {patches_path}")
     with open(patches_path, 'r') as f:
         patches = json.load(f)
     
@@ -408,11 +408,11 @@ def apply_from_files(input_path: str, patches_path: str, output_path: str):
     modified_html = applicator.apply_patches(patches)
     
     # Save result
-    print(f"\n💾 Saving modified HTML to: {output_path}")
+    print(f"\nðŸ’¾ Saving modified HTML to: {output_path}")
     with open(output_path, 'w') as f:
         f.write(modified_html)
     
-    print("\n✅ Done!")
+    print("\nâœ… Done!")
     print(f"Open {output_path} in a browser to see the result!")
 
 
@@ -438,5 +438,3 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
-# Made with Bob

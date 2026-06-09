@@ -110,5 +110,3 @@ def resolve_element_ids(element_id_map: dict[str, str], element_ids: list[str]) 
         List of CSS selectors
     """
     return [element_id_map.get(eid, "") for eid in element_ids]
-
-# Made with Bob

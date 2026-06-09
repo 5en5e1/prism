@@ -45,5 +45,3 @@ def validate_html(html: str) -> bool:
         return soup is not None
     except Exception:
         return False
-
-# Made with Bob

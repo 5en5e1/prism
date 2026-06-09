@@ -74,5 +74,3 @@ def should_chunk(html: str, max_tokens: int = 100_000) -> bool:
     """
     estimated_tokens = estimate_token_count(html)
     return estimated_tokens > max_tokens
-
-# Made with Bob

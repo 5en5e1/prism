@@ -7,5 +7,3 @@ This module imports all handler implementations to trigger their registration.
 from . import dom_manipulation  # noqa: F401
 
 __all__ = ["dom_manipulation"]
-
-# Made with Bob
