@@ -11,6 +11,12 @@ class ClientMetadata(BaseModel):
 
     extension_version: str | None = Field(None, description="Extension version string")
     trace_id: str | None = Field(None, description="Optional client-provided trace ID")
+    page_identity: dict[str, Any] | None = Field(
+        default=None, description="Client-side canonical page identity, when available"
+    )
+    page_snapshot: dict[str, Any] | None = Field(
+        default=None, description="Client-side multi-source page snapshot metadata"
+    )
 
 
 class ProcessRequest(BaseModel):

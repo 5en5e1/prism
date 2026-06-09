@@ -40,6 +40,8 @@ class Pipeline:
         user_prompt: str,
         params: dict[str, Any],
         trace_id: str,
+        page_identity: dict[str, Any] | None = None,
+        page_snapshot: dict[str, Any] | None = None,
     ) -> ProcessResponse:
         """
         Process a request through the appropriate handler.
@@ -75,7 +77,12 @@ class Pipeline:
             # Stage 1: Preprocess
             start = time.perf_counter()
             request_obj = handler.request_model(
-                page_url=page_url, html=html, user_prompt=user_prompt, params=params
+                page_url=page_url,
+                html=html,
+                user_prompt=user_prompt,
+                params=params,
+                page_identity=page_identity,
+                page_snapshot=page_snapshot,
             )
             context = await handler.preprocess(html, request_obj)
             timing["preprocess_ms"] = (time.perf_counter() - start) * 1000

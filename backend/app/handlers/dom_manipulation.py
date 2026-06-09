@@ -27,6 +27,7 @@ from ..schemas.dom_manipulation import (
     DOMManipulationResult,
     DOMPatchResult,
 )
+from ..state.models import PageIdentity, canonicalize_page_identity, snapshot_for_html
 
 logger = get_logger(__name__)
 
@@ -109,6 +110,8 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
                 "original_html": html,
                 "css_context": doc.css_context,
                 "skeleton_stats": doc.stats,
+                "page_identity": params.page_identity,
+                "page_snapshot": params.page_snapshot,
             },
         )
 
@@ -171,11 +174,36 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
         soup = context.metadata["soup"]
         id_map = context.metadata["id_map"]
         unique_ids = compute_unique_ids(soup)
+        client_identity = context.metadata.get("page_identity") or {}
+        client_snapshot = context.metadata.get("page_snapshot") or {}
+        page_url = client_snapshot.get("pageUrl") or client_identity.get("canonicalUrl") or ""
+        if client_identity.get("pageId"):
+            identity = PageIdentity(
+                page_id=client_identity["pageId"],
+                website_id=client_identity.get("websiteId", ""),
+                origin=client_identity.get("origin", ""),
+                path=client_identity.get("path", "/"),
+                route_key=client_identity.get("routeKey", "/"),
+                canonical_url=client_identity.get("canonicalUrl", page_url),
+                viewport_variant=client_identity.get("viewportVariant", "default"),
+                auth_variant=client_identity.get("authVariant", "unknown"),
+            )
+        else:
+            identity = canonicalize_page_identity(page_url or "about:blank")
+        snapshot = snapshot_for_html(
+            page_url=page_url or identity.canonical_url,
+            html=context.metadata.get("original_html", ""),
+            page_identity=identity,
+            navigation_epoch=int(client_snapshot.get("navigationEpoch") or 0),
+            element_count=int(client_snapshot.get("elementCount") or 0),
+            metadata=client_snapshot,
+        )
 
         ops: list[dict] = []
         css_vars: dict[str, str] = {}
         css_rules: list[str] = []
         skipped: list[str] = []
+        edit_records: list[dict] = []
 
         # Resolve selectors BEFORE apply_patches mutates/strips the soup.
         for i, patch in enumerate(parsed.patches):
@@ -202,6 +230,8 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
                 "op": op,
                 "s": robust_selector(tag, unique_ids),
                 "h": element_hint(tag),
+                "pageId": identity.page_id,
+                "snapshotId": snapshot.snapshot_id,
             }
             for field in ("text", "name", "value", "style", "class_name",
                           "html", "position"):
@@ -214,6 +244,32 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
                     continue
                 entry["t"] = robust_selector(dest, unique_ids)
             ops.append(entry)
+            edit_records.append({
+                "operationId": entry["id"],
+                "pageId": identity.page_id,
+                "snapshotId": snapshot.snapshot_id,
+                "elementInstanceId": (
+                    f"{identity.page_id}:{snapshot.snapshot_id}:"
+                    f"{getattr(patch, 'target', '')}"
+                ),
+                "componentId": None,
+                "targetScope": "page",
+                "operationType": op,
+                "beforeState": {"selectorCandidates": [entry["s"]], "hint": entry["h"]},
+                "afterState": {
+                    key: entry[key]
+                    for key in ("text", "name", "value", "style", "class_name", "html", "position")
+                    if key in entry
+                },
+                "selectorCandidates": [entry["s"]],
+                "expectedElementFingerprint": entry["h"],
+                "verificationRule": {
+                    "structural": ["target_exists", "fingerprint_matches"],
+                    "visual": ["visible_when_expected"],
+                },
+                "rollbackPath": "restore beforeState on the same pageId/snapshot lineage",
+                "status": "planned",
+            })
 
         # Optional lossy fallback for non-JS consumers. OFF by default: the
         # extension applies `patches` to the live DOM and never reads this,
@@ -241,6 +297,9 @@ class DOMManipulationHandler(Handler[DOMManipulationRequest, DOMManipulationResu
             css_vars=css_vars,
             css_rules=css_rules,
             skipped=skipped,
+            page_identity=identity.model_dump(),
+            snapshot=snapshot.model_dump(mode="json"),
+            edit_records=edit_records,
             modified_html=modified_html,
             changes_summary=summary,
             original_size=context.original_size,

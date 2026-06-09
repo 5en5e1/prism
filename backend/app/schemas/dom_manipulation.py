@@ -1,5 +1,6 @@
 """Schemas for DOM manipulation handler."""
 from typing import Literal
+from typing import Any
 
 from pydantic import BaseModel, Field
 
@@ -288,6 +289,18 @@ class DOMManipulationResult(BaseModel):
     skipped: list[str] = Field(
         default_factory=list, description="Patches that could not be resolved"
     )
+    page_identity: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Canonical website/page identity for this result",
+    )
+    snapshot: dict[str, Any] = Field(
+        default_factory=dict,
+        description="Page snapshot identity and capture metadata",
+    )
+    edit_records: list[dict[str, Any]] = Field(
+        default_factory=list,
+        description="Page-specific edit records with rollback/verification metadata",
+    )
     modified_html: str = Field(..., description="Server-applied HTML (fallback)")
     changes_summary: str = Field(..., description="Brief description of changes made")
     original_size: int = Field(..., description="Original HTML size in bytes")
@@ -301,3 +314,5 @@ class DOMManipulationRequest(BaseModel):
     html: str
     user_prompt: str
     params: DOMManipulationParams = Field(default_factory=DOMManipulationParams)
+    page_identity: dict[str, Any] | None = None
+    page_snapshot: dict[str, Any] | None = None

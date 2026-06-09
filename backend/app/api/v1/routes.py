@@ -108,6 +108,8 @@ async def process_request(
             user_prompt=effective_prompt,
             params=request.params,
             trace_id=trace_id,
+            page_identity=request.client_metadata.page_identity,
+            page_snapshot=request.client_metadata.page_snapshot,
         )
         return response
 
