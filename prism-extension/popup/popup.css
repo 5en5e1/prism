@@ -303,9 +303,7 @@ textarea:focus {
 }
 
 .mode-row {
-  display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  gap: 5px;
+  min-width: 0;
 }
 
 button {
@@ -332,27 +330,42 @@ button:disabled {
   transform: none;
 }
 
-.mode-button {
-  min-height: 30px;
-  border-color: rgba(148, 163, 184, 0.3);
-  background: rgba(255, 255, 255, 0.5);
-  color: #475569;
-  font-size: 11px;
-  backdrop-filter: blur(12px);
+.mode-picker {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid rgba(148, 163, 184, 0.22);
+  border-radius: 8px;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.48);
+  backdrop-filter: blur(12px) saturate(1.14);
 }
 
-.mode-button:hover {
-  border-color: rgba(8, 145, 178, 0.32);
-  background: rgba(255, 255, 255, 0.82);
+.mode-picker-label {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.mode-select {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  background: transparent;
   color: #0e7490;
-  box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 850;
+  outline: 0;
 }
 
-.mode-button.selected {
-  border-color: rgba(37, 99, 235, 0.48);
-  background: linear-gradient(180deg, rgba(239, 246, 255, 0.95), rgba(219, 234, 254, 0.72));
-  color: var(--accent-strong);
-  box-shadow: 0 8px 20px rgba(37, 99, 235, 0.13), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+.mode-picker:focus-within {
+  border-color: rgba(8, 145, 178, 0.38);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 8px 20px rgba(8, 145, 178, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.86);
 }
 
 .generate-button {
@@ -381,6 +394,12 @@ button:disabled {
   border-color: rgba(225, 29, 72, 0.16);
   background: rgba(255, 241, 242, 0.74);
   color: #be123c;
+}
+
+.pick-button.clear {
+  border-color: rgba(100, 116, 139, 0.18);
+  background: rgba(248, 250, 252, 0.74);
+  color: #475569;
 }
 
 .pick-button[hidden] {
@@ -698,7 +717,7 @@ button:disabled {
   .tab-header,
   .settings-button,
   .prompt-composer,
-  .mode-button,
+  .mode-picker,
   .history-toggle,
   .empty-cache,
   .empty-history,

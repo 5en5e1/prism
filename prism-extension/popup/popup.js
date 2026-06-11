@@ -16,6 +16,7 @@ const openSettings = document.querySelector("#openSettings");
 const clearAllPopupCache = document.querySelector("#clearAllPopupCache");
 const startElementPick = document.querySelector("#startElementPick");
 const cancelElementPick = document.querySelector("#cancelElementPick");
+const clearSelectedElements = document.querySelector("#clearSelectedElements");
 const selectedElementsList = document.querySelector("#selectedElementsList");
 
 const TOKEN_LIMIT = 1000000;
@@ -28,6 +29,7 @@ const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
 // instruction text lives here. `modeButtons` is populated by renderModes().
 let modeList = [];
 let modeButtons = [];
+let modeSelect = null;
 
 function knownModeKeys() {
   return new Set(modeList.map((m) => m.key));
@@ -36,21 +38,38 @@ function knownModeKeys() {
 function renderModes(modes) {
   modeList = Array.isArray(modes) ? modes : [];
   modeRow.innerHTML = "";
-  modeButtons = modeList.map((m) => {
-    const button = document.createElement("button");
-    button.type = "button";
-    button.className = "mode-button";
-    button.dataset.mode = m.key;
-    button.setAttribute("role", "radio");
-    button.setAttribute("aria-checked", "false");
-    button.textContent = m.label;
-    button.addEventListener("click", () => {
-      setSelectedMode(selectedMode === m.key ? null : m.key);
-    });
-    modeRow.appendChild(button);
-    return button;
+  modeButtons = [];
+
+  const shell = document.createElement("label");
+  shell.className = "mode-picker";
+
+  const label = document.createElement("span");
+  label.className = "mode-picker-label";
+  label.textContent = "Template";
+
+  modeSelect = document.createElement("select");
+  modeSelect.className = "mode-select";
+  modeSelect.setAttribute("aria-label", "Template");
+
+  const defaultOption = document.createElement("option");
+  defaultOption.value = "";
+  defaultOption.textContent = "No template";
+  modeSelect.append(defaultOption);
+
+  modeList.forEach((m) => {
+    const option = document.createElement("option");
+    option.value = m.key;
+    option.textContent = m.label;
+    modeSelect.append(option);
   });
-  // Re-assert any restored selection now that buttons exist.
+
+  modeSelect.addEventListener("change", () => {
+    setSelectedMode(modeSelect.value || null);
+  });
+
+  shell.append(label, modeSelect);
+  modeRow.append(shell);
+  // Re-assert any restored template selection now that the picker exists.
   setSelectedMode(normalizeMode(selectedMode), false);
 }
 
@@ -206,7 +225,7 @@ function nextElementReference(elements = []) {
       .map((element) => element?.reference)
       .filter((reference) => typeof reference === "string")
   );
-  let index = elements.length + 1;
+  let index = 1;
   while (used.has(`element${index}`)) {
     index += 1;
   }
@@ -564,6 +583,9 @@ function setSelectedMode(mode, shouldPersist = true) {
     button.classList.toggle("selected", isSelected);
     button.setAttribute("aria-checked", String(isSelected));
   });
+  if (modeSelect) {
+    modeSelect.value = selectedMode || "";
+  }
 
   if (shouldPersist) {
     currentTabState.draftMode = selectedMode;
@@ -883,6 +905,7 @@ function renderSelectedElements() {
   const elements = currentTabState.selectedElements || [];
   selectedElementsList.replaceChildren();
   selectedElementsList.hidden = !elements.length;
+  clearSelectedElements.hidden = !elements.length;
 
   elements.forEach((element) => {
     const chip = document.createElement("span");
@@ -903,30 +926,154 @@ function renderSelectedElements() {
   });
 }
 
-function removeReferenceFromPrompt(reference) {
+function referencePattern(reference, flags = "") {
   const escaped = reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|\\s)'?${escaped}'?(?=$|[\\s.,;:!?])`, flags);
+}
+
+function promptHasReference(reference, text = promptInput.value) {
+  return referencePattern(reference).test(text);
+}
+
+function replacePromptReference(text, oldReference, newReference) {
+  if (oldReference === newReference) {
+    return text;
+  }
+  return text.replace(referencePattern(oldReference, "g"), (_match, leading) => `${leading}'${newReference}'`);
+}
+
+function removeReferenceFromPrompt(reference) {
   const nextValue = promptInput.value
-    .replace(new RegExp(`\\s*'?${escaped}'?`, "g"), " ")
+    .replace(referencePattern(reference, "g"), " ")
     .replace(/\s{2,}/g, " ")
     .trim();
   setPromptValue(nextValue, { focus: document.activeElement === promptInput });
   syncPromptDraftFromInput();
 }
 
+async function syncSelectionSessionToActiveTab() {
+  if (!currentTabState.selectionMode) {
+    return;
+  }
+  const tab = activeTab || (await getActiveTab().catch(() => null));
+  if (!tab?.id) {
+    return;
+  }
+  const nextReference = nextElementReference(currentTabState.selectedElements || []);
+  currentTabState.nextElementIndex = Number(nextReference.replace(/^element/, "")) || 1;
+  await sendRuntimeMessage(
+    {
+      type: "SYNC_ELEMENT_SELECTION_SESSION",
+      payload: {
+        tabId: tab.id,
+        promptText: promptInput.value,
+        selectionStart: promptInput.selectionStart || 0,
+        selectionEnd: promptInput.selectionEnd || promptInput.selectionStart || 0,
+        nextReference,
+        selectedElements: currentTabState.selectedElements || []
+      }
+    },
+    3000
+  ).catch(() => {});
+}
+
+async function syncSelectedMarkersToTab(visible = currentTabState.selectionMode) {
+  const tab = activeTab || (await getActiveTab().catch(() => null));
+  if (!tab?.id) {
+    return;
+  }
+  const elements = currentTabState.selectedElements || [];
+  if (!elements.length) {
+    await sendTabMessage(tab.id, { type: "CLEAR_SELECTED_ELEMENTS" }, 2000).catch(() => {});
+    return;
+  }
+  await sendTabMessage(
+    tab.id,
+    {
+      type: "UPDATE_ELEMENT_SELECTION",
+      reference: nextElementReference(elements),
+      selectedElements: elements,
+      markersVisible: visible
+    },
+    2000
+  ).catch(() => {});
+}
+
+function compactSelectedElementsToPrompt(options = {}) {
+  const pruneMissing = options.pruneMissing !== false;
+  let promptText = promptInput.value;
+  const previous = currentTabState.selectedElements || [];
+  const kept = pruneMissing
+    ? previous.filter((element) => promptHasReference(element.reference, promptText))
+    : previous;
+  let changed = kept.length !== previous.length;
+  const selectedElements = kept.map((element, index) => {
+    const reference = `element${index + 1}`;
+    if (element.reference !== reference) {
+      promptText = replacePromptReference(promptText, element.reference, reference);
+      changed = true;
+      return { ...element, reference };
+    }
+    return element;
+  });
+
+  if (!changed) {
+    return false;
+  }
+
+  currentTabState.selectedElements = selectedElements;
+  const nextReference = nextElementReference(selectedElements);
+  currentTabState.nextElementIndex = Number(nextReference.replace(/^element/, "")) || selectedElements.length + 1;
+  setPromptValue(promptText, {
+    focus: document.activeElement === promptInput,
+    selectionStart: Math.min(promptInput.selectionStart || promptText.length, promptText.length),
+    selectionEnd: Math.min(promptInput.selectionEnd || promptText.length, promptText.length)
+  });
+  syncPromptDraftFromInput();
+  renderSelectedElements();
+  return true;
+}
+
 async function removeSelectedReference(reference) {
   currentTabState.selectedElements = (currentTabState.selectedElements || []).filter(
     (element) => element.reference !== reference
   );
-  const nextReference = nextElementReference(currentTabState.selectedElements);
-  currentTabState.nextElementIndex = Number(nextReference.replace(/^element/, "")) || 1;
   removeReferenceFromPrompt(reference);
+  compactSelectedElementsToPrompt({ pruneMissing: false });
+  renderSelectedElements();
+  scheduleDraftSave();
+
+  await syncSelectedMarkersToTab();
+  await syncSelectionSessionToActiveTab();
+}
+
+async function reconcileSelectedElementsFromPrompt() {
+  if (!compactSelectedElementsToPrompt()) {
+    return;
+  }
+  scheduleDraftSave();
+  await syncSelectedMarkersToTab();
+  await syncSelectionSessionToActiveTab();
+}
+
+async function clearSelectedElementReferences() {
+  const hadSelectionMode = currentTabState.selectionMode;
+  (currentTabState.selectedElements || []).forEach((element) => {
+    removeReferenceFromPrompt(element.reference);
+  });
+  currentTabState.selectedElements = [];
+  currentTabState.nextElementIndex = 1;
   renderSelectedElements();
   scheduleDraftSave();
 
   const tab = activeTab || (await getActiveTab().catch(() => null));
-  if (tab?.id) {
-    sendTabMessage(tab.id, { type: "FORGET_SELECTED_ELEMENT", reference }, 2000).catch(() => {});
+  if (hadSelectionMode && tab?.id) {
+    await cancelElementSelection().catch(() => {});
   }
+  if (tab?.id) {
+    await sendTabMessage(tab.id, { type: "CLEAR_SELECTED_ELEMENTS" }, 2000).catch(() => {});
+  }
+  setComposerStatus("Selected elements cleared.", "ready", true);
 }
 
 async function beginElementSelection() {
@@ -950,7 +1097,8 @@ async function beginElementSelection() {
         promptText: promptInput.value,
         selectionStart: promptInput.selectionStart || 0,
         selectionEnd: promptInput.selectionEnd || promptInput.selectionStart || 0,
-        nextReference
+        nextReference,
+        selectedElements: currentTabState.selectedElements || []
       }
     },
     7000
@@ -1437,6 +1585,9 @@ async function loadTabState(tab) {
 
 promptInput.addEventListener("input", () => {
   syncPromptDraftFromInput();
+  reconcileSelectedElementsFromPrompt().catch((error) => {
+    setComposerStatus(error.message || "Could not sync selected elements.", "error", true);
+  });
   scheduleDraftSave();
 });
 
@@ -1470,6 +1621,12 @@ selectedElementsList.addEventListener("click", (event) => {
   }
   removeSelectedReference(reference).catch((error) => {
     setComposerStatus(error.message || "Could not remove selected element.", "error", true);
+  });
+});
+
+clearSelectedElements.addEventListener("click", () => {
+  clearSelectedElementReferences().catch((error) => {
+    setComposerStatus(error.message || "Could not clear selected elements.", "error", true);
   });
 });
 

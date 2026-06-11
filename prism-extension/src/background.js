@@ -123,6 +123,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "SYNC_ELEMENT_SELECTION_SESSION") {
+    syncElementSelectionSession(message.payload)
+      .then(sendResponse)
+      .catch((error) => sendResponse(toErrorResponse(error)));
+    return true;
+  }
+
   if (message?.type === "ELEMENT_SELECTED") {
     finishElementSelection(message.payload, _sender)
       .then(sendResponse)
@@ -212,7 +219,7 @@ function nextElementReference(elements = []) {
       .map((element) => element?.reference)
       .filter((reference) => typeof reference === "string")
   );
-  let index = elements.length + 1;
+  let index = 1;
   while (used.has(`element${index}`)) {
     index += 1;
   }
@@ -258,13 +265,43 @@ async function beginElementSelection(payload = {}) {
   try {
     await chrome.tabs.sendMessage(tabId, {
       type: "START_ELEMENT_SELECTION",
-      reference: nextReference
+      reference: nextReference,
+      selectedElements: payload.selectedElements || []
     });
   } catch (error) {
     delete sessions[String(tabId)];
     await saveElementSelectionSessions(sessions);
     throw error;
   }
+  return { ok: true };
+}
+
+async function syncElementSelectionSession(payload = {}) {
+  const tabId = payload.tabId;
+  if (typeof tabId !== "number") {
+    return { ok: true };
+  }
+
+  const sessions = await getElementSelectionSessions();
+  const session = sessions[String(tabId)];
+  if (!session) {
+    return { ok: true };
+  }
+
+  sessions[String(tabId)] = {
+    ...session,
+    promptText: payload.promptText || "",
+    selectionStart: payload.selectionStart || 0,
+    selectionEnd: payload.selectionEnd || payload.selectionStart || 0,
+    nextReference: payload.nextReference || session.nextReference
+  };
+  await saveElementSelectionSessions(sessions);
+  await chrome.tabs.sendMessage(tabId, {
+    type: "UPDATE_ELEMENT_SELECTION",
+    reference: payload.nextReference || session.nextReference,
+    selectedElements: payload.selectedElements || [],
+    markersVisible: true
+  }).catch(() => {});
   return { ok: true };
 }
 

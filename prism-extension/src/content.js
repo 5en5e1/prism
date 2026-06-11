@@ -36,19 +36,31 @@
     }
 
     if (message?.type === "START_ELEMENT_SELECTION") {
-      startElementSelection(message.reference);
+      startElementSelection(message.reference, message.selectedElements || []);
       sendResponse({ ok: true });
       return true;
     }
 
     if (message?.type === "CANCEL_ELEMENT_SELECTION") {
-      stopElementSelection();
+      stopElementSelection({ hideMarkers: true });
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    if (message?.type === "UPDATE_ELEMENT_SELECTION") {
+      updateElementSelection(message.reference, message.selectedElements || [], message.markersVisible);
       sendResponse({ ok: true });
       return true;
     }
 
     if (message?.type === "FORGET_SELECTED_ELEMENT") {
       forgetSelectedElement(message.reference);
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    if (message?.type === "CLEAR_SELECTED_ELEMENTS") {
+      clearSelectedElementMarkers();
       sendResponse({ ok: true });
       return true;
     }
@@ -1138,6 +1150,27 @@
     ensureSelectionObserver();
   }
 
+  function hideSelectedMarkers() {
+    selectionMarkers.forEach(({ marker }) => {
+      marker.hidden = true;
+    });
+  }
+
+  function restoreSelectedMarkers(records = [], visible = true) {
+    clearSelectedElementMarkers();
+    records.forEach((record) => {
+      const target = findReplacementElement(record);
+      if (!target) {
+        return;
+      }
+      placeSelectedMarker(record.reference, target, record);
+      const selected = selectionMarkers.get(record.reference);
+      if (selected?.marker) {
+        selected.marker.hidden = !visible;
+      }
+    });
+  }
+
   function refreshSelectedMarkers() {
     selectionMarkers.forEach(({ el, marker, record }, reference) => {
       if (!document.documentElement.contains(el)) {
@@ -1248,15 +1281,16 @@
   function handleSelectionKeydown(event) {
     if (selectionState.active && event.key === "Escape") {
       blockSelectionEvent(event);
-      stopElementSelection();
+      stopElementSelection({ hideMarkers: true });
       chrome.runtime.sendMessage({ type: "ELEMENT_SELECTION_CANCELLED" });
     }
   }
 
-  function startElementSelection(reference) {
+  function startElementSelection(reference, selectedElements = []) {
     stopElementSelection();
     selectionState = { active: true, reference: reference || "element1", hovered: null, pending: false };
     ensureSelectionHighlight();
+    restoreSelectedMarkers(selectedElements, true);
     ensureSelectionObserver();
     document.addEventListener("pointermove", handleSelectionPointerMove, true);
     document.addEventListener("pointerdown", blockSelectionEvent, true);
@@ -1270,7 +1304,14 @@
     window.addEventListener("resize", refreshSelectedMarkers, true);
   }
 
-  function stopElementSelection() {
+  function updateElementSelection(reference, selectedElements = [], markersVisible = selectionState.active) {
+    if (selectionState.active && reference) {
+      selectionState.reference = reference;
+    }
+    restoreSelectedMarkers(selectedElements, Boolean(markersVisible));
+  }
+
+  function stopElementSelection(options = {}) {
     document.removeEventListener("pointermove", handleSelectionPointerMove, true);
     document.removeEventListener("pointerdown", blockSelectionEvent, true);
     document.removeEventListener("mousedown", blockSelectionEvent, true);
@@ -1282,6 +1323,9 @@
     selectionState = { active: false, reference: "", hovered: null, pending: false };
     if (selectionHighlight) {
       selectionHighlight.hidden = true;
+    }
+    if (options.hideMarkers) {
+      hideSelectedMarkers();
     }
     stopSelectionObserverIfIdle();
   }

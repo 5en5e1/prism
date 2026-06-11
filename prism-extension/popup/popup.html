@@ -32,9 +32,10 @@
           <textarea id="promptInput" rows="5" placeholder="Move the sidebar to the top right"></textarea>
           <div id="selectedElementsList" class="selected-elements-list" aria-label="Selected page elements" hidden></div>
           <div class="composer-footer">
-            <!-- Mode buttons are rendered dynamically from GET /api/v1/modes -->
-            <div class="mode-row" id="modeRow" role="radiogroup" aria-label="Generation mode"></div>
+            <!-- Template modes are rendered dynamically from GET /api/v1/modes -->
+            <div class="mode-row" id="modeRow" aria-label="Template mode"></div>
             <div class="composer-actions">
+              <button id="clearSelectedElements" type="button" class="pick-button clear" hidden>Clear</button>
               <button id="startElementPick" type="button" class="pick-button">Pick</button>
               <button id="cancelElementPick" type="button" class="pick-button cancel" hidden>Cancel</button>
               <button id="applyPrompt" type="button" class="generate-button">Generate</button>
