@@ -902,6 +902,122 @@
     return path;
   }
 
+  function compactText(value, limit = 160) {
+    return String(value || "").replace(/\s+/g, " ").trim().slice(0, limit);
+  }
+
+  function elementClasses(el, limit = 8) {
+    return typeof el.className === "string"
+      ? el.className.trim().split(/\s+/).filter(Boolean).slice(0, limit)
+      : [];
+  }
+
+  function compactElementSummary(el) {
+    if (!el || el.nodeType !== Node.ELEMENT_NODE) {
+      return null;
+    }
+    const rect = el.getBoundingClientRect();
+    return {
+      tagName: el.tagName.toLowerCase(),
+      id: el.id || "",
+      classes: elementClasses(el, 5),
+      role: el.getAttribute("role") || "",
+      ariaLabel: el.getAttribute("aria-label") || "",
+      text: compactText(el.innerText || el.textContent, 120),
+      boundingBox: {
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height)
+      }
+    };
+  }
+
+  function parentChain(el, limit = 5) {
+    const parents = [];
+    let node = el.parentElement;
+    while (node && node !== document.body && node !== document.documentElement && parents.length < limit) {
+      parents.push(compactElementSummary(node));
+      node = node.parentElement;
+    }
+    return parents.filter(Boolean);
+  }
+
+  function siblingSummaries(el, direction, limit = 3) {
+    const siblings = [];
+    let node = direction === "previous" ? el.previousElementSibling : el.nextElementSibling;
+    while (node && siblings.length < limit) {
+      siblings.push(compactElementSummary(node));
+      node = direction === "previous" ? node.previousElementSibling : node.nextElementSibling;
+    }
+    return siblings.filter(Boolean);
+  }
+
+  function childSummaries(el, limit = 6) {
+    return Array.from(el.children || [])
+      .slice(0, limit)
+      .map(compactElementSummary)
+      .filter(Boolean);
+  }
+
+  function selectedComputedStyles(el) {
+    const style = window.getComputedStyle(el);
+    const properties = [
+      "display",
+      "position",
+      "inset",
+      "top",
+      "right",
+      "bottom",
+      "left",
+      "zIndex",
+      "width",
+      "height",
+      "minWidth",
+      "minHeight",
+      "maxWidth",
+      "maxHeight",
+      "margin",
+      "padding",
+      "color",
+      "backgroundColor",
+      "backgroundImage",
+      "border",
+      "borderRadius",
+      "boxShadow",
+      "opacity",
+      "fontFamily",
+      "fontSize",
+      "fontWeight",
+      "lineHeight",
+      "textAlign",
+      "transform",
+      "overflow",
+      "overflowX",
+      "overflowY",
+      "flex",
+      "flexDirection",
+      "alignItems",
+      "justifyContent",
+      "gridTemplateColumns",
+      "gridTemplateRows"
+    ];
+    return properties.reduce((acc, property) => {
+      acc[property] = style[property] || "";
+      return acc;
+    }, {});
+  }
+
+  function selectedElementContext(el) {
+    return {
+      parentChain: parentChain(el),
+      previousSiblings: siblingSummaries(el, "previous"),
+      nextSiblings: siblingSummaries(el, "next"),
+      children: childSummaries(el),
+      childElementCount: el.children?.length || 0
+    };
+  }
+
   function selectedElementRecord(el, reference) {
     const rect = el.getBoundingClientRect();
     const dataAttributes = {};
@@ -910,12 +1026,25 @@
       if (attr.name.startsWith("data-")) {
         dataAttributes[attr.name] = attr.value.slice(0, 160);
       }
-      if (["href", "src", "alt", "title", "name", "type", "role", "aria-label"].includes(attr.name)) {
+      if ([
+        "href",
+        "src",
+        "alt",
+        "title",
+        "name",
+        "type",
+        "role",
+        "aria-label",
+        "aria-labelledby",
+        "aria-describedby",
+        "placeholder",
+        "value"
+      ].includes(attr.name)) {
         attributes[attr.name] = attr.value.slice(0, 200);
       }
     });
-    const text = (el.innerText || el.textContent || "").replace(/\s+/g, " ").trim().slice(0, 240);
-    const classes = typeof el.className === "string" ? el.className.trim().split(/\s+/).filter(Boolean) : [];
+    const text = compactText(el.innerText || el.textContent, 240);
+    const classes = elementClasses(el);
     const box = {
       x: Math.round(rect.x),
       y: Math.round(rect.y),
@@ -937,11 +1066,17 @@
       dataAttributes,
       attributes,
       boundingBox: box,
+      computedStyles: selectedComputedStyles(el),
+      domContext: selectedElementContext(el),
       visualPosition: {
         viewportWidth: window.innerWidth,
         viewportHeight: window.innerHeight,
         scrollX: window.scrollX,
         scrollY: window.scrollY
+      },
+      screenshotContext: {
+        available: false,
+        reason: "No screenshot capture is requested for element selection yet."
       },
       semanticRole: el.getAttribute("role") || el.getAttribute("aria-label") || "",
       fingerprint: stableHash(`${el.tagName}|${el.id}|${classes.join(".")}|${text}|${box.width}x${box.height}`),

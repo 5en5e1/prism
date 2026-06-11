@@ -145,7 +145,14 @@ function normalizeSelectedElement(element) {
       : {},
     attributes: element.attributes && typeof element.attributes === "object" ? element.attributes : {},
     boundingBox: element.boundingBox || {},
+    computedStyles: element.computedStyles && typeof element.computedStyles === "object"
+      ? element.computedStyles
+      : {},
+    domContext: element.domContext && typeof element.domContext === "object" ? element.domContext : {},
     visualPosition: element.visualPosition || {},
+    screenshotContext: element.screenshotContext && typeof element.screenshotContext === "object"
+      ? element.screenshotContext
+      : {},
     semanticRole: element.semanticRole || "",
     fingerprint: element.fingerprint || "",
     selectedAt: element.selectedAt || new Date().toISOString()
@@ -165,6 +172,10 @@ function normalizeVersion(version) {
     createdAt: version.createdAt || new Date().toISOString(),
     kind: version.kind || "generated",
     result: version.result || null,
+    deltaResult: version.deltaResult || null,
+    baseResult: version.baseResult || null,
+    parentVersionId: version.parentVersionId || null,
+    mergeMode: version.mergeMode || "replace",
     pending: Boolean(version.pending)
   };
 }
@@ -266,7 +277,7 @@ function getSiteKey(url) {
   return parsedUrl.origin;
 }
 
-// The Story is per-page (origin + path) so /projects/ keeps its own
+// Templates are per-page (origin + path) so /projects/ keeps its own
 // versions, separate from / on the same site — matching how the HTML
 // cache is keyed. Non-URL tabs (chrome://, new tab) fall back to tab id.
 function pageStateKey(tab) {
@@ -606,6 +617,16 @@ function detailContentFor(version) {
   } else if (version.pending) {
     text = "This generated version is still waiting for the API result.";
   }
+  if (version.result?.mergeSummary) {
+    const summary = version.result.mergeSummary;
+    const mergeLine = `Merged update: ${summary.basePatchCount || 0} previous patches + ${summary.deltaPatchCount || 0} new patches.`;
+    text = [text, mergeLine].filter(Boolean).join("\n\n");
+  }
+  if (version.result?.mergeConflicts?.length) {
+    text = [text, `${version.result.mergeConflicts.length} merge conflict marker(s) were recorded.`]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   return { text, mode: version.mode ? modeLabel(version.mode) : "" };
 }
 
@@ -668,6 +689,68 @@ function reconcileDetailPane() {
   if (card) card.classList.add("detail-active");
 }
 
+function versionMetaText(version, placement) {
+  if (version.pending) {
+    return "Generating";
+  }
+  if (isOriginalVersion(version)) {
+    return "Base";
+  }
+  const count = (version.result?.patches || []).length;
+  const mergeLabel = version.result?.mergeMode === "merge" || version.mergeMode === "merge"
+    ? "Merged"
+    : "Template";
+  const currentLabel = placement === "current" ? "Editing" : "Saved";
+  return [currentLabel, mergeLabel, count ? `${count} ops` : ""].filter(Boolean).join(" · ");
+}
+
+function appendVersionAction(actions, label, action, versionId, className = "") {
+  const button = document.createElement("button");
+  button.className = `version-menu-item ${className}`.trim();
+  button.type = "button";
+  button.dataset.action = action;
+  button.dataset.versionId = versionId;
+  button.textContent = label;
+  actions.append(button);
+}
+
+function createVersionActions(version, placement) {
+  const actions = document.createElement("div");
+  actions.className = "version-actions";
+
+  const trigger = document.createElement("button");
+  trigger.className = "version-menu-trigger";
+  trigger.type = "button";
+  trigger.setAttribute("aria-label", "Template actions");
+  trigger.textContent = "...";
+
+  const menu = document.createElement("div");
+  menu.className = "version-action-menu";
+
+  if (placement === "history") {
+    const canRestore = isOriginalVersion(version) || Boolean(version.prompt || version.mode);
+    appendVersionAction(menu, "Restore", "rollback", version.id);
+    menu.lastElementChild.disabled = version.pending || !canRestore;
+  }
+
+  if (!isOriginalVersion(version)) {
+    appendVersionAction(
+      menu,
+      "Delete",
+      placement === "history" ? "delete-history" : "delete-current",
+      version.id,
+      "danger"
+    );
+  }
+
+  if (!menu.children.length) {
+    return null;
+  }
+
+  actions.append(trigger, menu);
+  return actions;
+}
+
 function createVersionCard(version, placement) {
   const card = document.createElement("article");
   card.className = `version-card ${placement === "current" ? "current-card" : "history-card"}`;
@@ -676,34 +759,19 @@ function createVersionCard(version, placement) {
   card.classList.toggle("protected-card", isOriginalVersion(version));
 
   card.append(createTextElement("version-index", `#${version.index}`));
-  card.append(createTextElement("version-preview", previewVersion(version)));
+  const body = document.createElement("div");
+  body.className = "version-body";
+  body.append(createTextElement("version-preview", previewVersion(version)));
+  body.append(createTextElement("version-meta", versionMetaText(version, placement)));
+  card.append(body);
 
   if (placement === "current") {
-    card.append(createTextElement("current-chip", "Current"));
+    card.append(createTextElement("current-chip", "Editing"));
   }
 
-  if (placement === "history") {
-    const rollbackButton = document.createElement("button");
-    rollbackButton.className = "version-action";
-    rollbackButton.type = "button";
-    rollbackButton.dataset.action = "rollback";
-    rollbackButton.dataset.versionId = version.id;
-    // Re-runnable as long as it isn't still pending and there's something
-    // to act on (the original, or a prompt/mode). No cached result needed.
-    const canSelect = isOriginalVersion(version) || Boolean(version.prompt || version.mode);
-    rollbackButton.disabled = version.pending || !canSelect;
-    rollbackButton.textContent = "Rollback";
-    card.append(rollbackButton);
-  }
-
-  if (!isOriginalVersion(version)) {
-    const deleteButton = document.createElement("button");
-    deleteButton.className = "version-action danger";
-    deleteButton.type = "button";
-    deleteButton.dataset.action = placement === "history" ? "delete-history" : "delete-current";
-    deleteButton.dataset.versionId = version.id;
-    deleteButton.textContent = "Delete";
-    card.append(deleteButton);
+  const actions = createVersionActions(version, placement);
+  if (actions) {
+    card.append(actions);
   }
 
   card.addEventListener("click", (event) => {
@@ -1015,8 +1083,16 @@ function createGeneratedVersionFromCache(pageEntry) {
       traceId: pageEntry.traceId || "",
       pageIdentity: pageEntry.pageIdentity || {},
       pageSnapshot: pageEntry.pageSnapshot || {},
-      editRecords: pageEntry.editRecords || []
+      editRecords: pageEntry.editRecords || [],
+      deltaResult: pageEntry.deltaResult || null,
+      parentVersionId: pageEntry.parentVersionId || null,
+      mergeMode: pageEntry.mergeMode || "replace",
+      mergeConflicts: pageEntry.mergeConflicts || [],
+      mergeSummary: pageEntry.mergeSummary || null
     },
+    deltaResult: pageEntry.deltaResult || null,
+    parentVersionId: pageEntry.parentVersionId || null,
+    mergeMode: pageEntry.mergeMode || "replace",
     pending: false
   };
 }
@@ -1070,8 +1146,12 @@ async function ensureGeneratedVersionFromHtmlCache(tab) {
   return true;
 }
 
-async function saveGeneratedVersion(prompt, mode, snapshotHtml) {
+async function saveGeneratedVersion(prompt, mode, snapshotHtml, options = {}) {
   const versionId = createId();
+  const baseVersion = Object.hasOwn(options, "baseVersion")
+    ? options.baseVersion
+    : currentTabState.current;
+  const baseResult = cacheEntryHasGeneratedOutput(baseVersion?.result) ? baseVersion.result : null;
   const version = {
     id: versionId,
     index: 0,
@@ -1080,6 +1160,10 @@ async function saveGeneratedVersion(prompt, mode, snapshotHtml) {
     kind: "generated",
     createdAt: new Date().toISOString(),
     result: null,
+    deltaResult: null,
+    baseResult,
+    parentVersionId: baseResult ? baseVersion.id : null,
+    mergeMode: baseResult ? "merge" : "replace",
     pending: true
   };
 
@@ -1156,7 +1240,7 @@ async function rollbackVersion(versionId) {
   if (isOriginalVersion(selected)) {
     await sendTabMessage(tab.id, { type: "CLEAR_PAGE_CACHE" });
 
-    // Keep the previously-current modified version in the Story — only the
+    // Keep the previously-current modified version in Templates — only the
     // live page resets to original, the saved versions must survive.
     const remaining = currentTabState.history.filter((version) => version.id !== versionId);
     const history = currentTabState.current
@@ -1194,7 +1278,7 @@ async function rollbackVersion(versionId) {
     }
 
     // Make the restored version current and push the previously-current one
-    // back into history — mirror the original-version branch so the Story
+    // back into history — mirror the original-version branch so Templates
     // reflects reality instead of spawning a new box.
     const remaining = currentTabState.history.filter((version) => version.id !== versionId);
     const history = currentTabState.current
@@ -1228,7 +1312,10 @@ async function rollbackVersion(versionId) {
   const keptDraft = promptInput.value;
   const keptMode = selectedMode;
 
-  const newVersionId = await saveGeneratedVersion(selected.prompt, selected.mode, snapshot.html);
+  const newVersionId = await saveGeneratedVersion(selected.prompt, selected.mode, snapshot.html, {
+    baseVersion: selected
+  });
+  const pendingVersion = currentTabState.current;
 
   if (keptDraft) {
     setPromptValue(keptDraft);
@@ -1250,6 +1337,8 @@ async function rollbackVersion(versionId) {
         pageSnapshot: snapshot.pageSnapshot || null,
         promptVersionId: newVersionId,
         tabStateKey: activeTabKey,
+        baseResult: pendingVersion?.baseResult || null,
+        parentVersionId: pendingVersion?.parentVersionId || null,
         user_prompt: selected.prompt,
         selected_mode: selected.mode || null,
         params: { selected_elements: currentTabState.selectedElements || [] }
@@ -1454,6 +1543,7 @@ applyPrompt.addEventListener("click", async () => {
     }
 
     const versionId = await saveGeneratedVersion(userPrompt, mode, snapshot.html);
+    const pendingVersion = currentTabState.current;
     // Send only the chosen mode key + the user prompt. The backend resolves
     // the mode's instruction and composes the effective prompt.
     const handoff = await sendRuntimeMessage(
@@ -1467,6 +1557,8 @@ applyPrompt.addEventListener("click", async () => {
           pageSnapshot: snapshot.pageSnapshot || null,
           promptVersionId: versionId,
           tabStateKey: activeTabKey,
+          baseResult: pendingVersion?.baseResult || null,
+          parentVersionId: pendingVersion?.parentVersionId || null,
           user_prompt: userPrompt,
           selected_mode: mode || null,
           params: { selected_elements: currentTabState.selectedElements || [] }

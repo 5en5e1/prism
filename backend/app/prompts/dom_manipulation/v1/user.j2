@@ -8,9 +8,11 @@ The user selected these live page elements before submitting the prompt:
 
 {{ selected_elements_context }}
 
-If the request mentions a quoted reference like `'element1'`, treat it as
-the corresponding anchor id above. Do not guess another element unless that
-reference could not be resolved.
+These references are precise edit targets. For prompts like "turn this red",
+"move this left", "make this thicker", "hide this section", or "change this
+button style", apply the change to the selected target described above even
+when the prompt does not repeat the quoted reference. Do not guess another
+element unless the selected target could not be resolved.
 {% endif %}
 {% if css_context %}
 ## Styles (existing design system — keep edits consistent with this)

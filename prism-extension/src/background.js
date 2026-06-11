@@ -446,7 +446,126 @@ function resultToCacheEntry(versionResult, version = {}) {
     traceId: versionResult?.traceId || "",
     pageIdentity: versionResult?.pageIdentity || {},
     pageSnapshot: versionResult?.pageSnapshot || {},
-    editRecords: versionResult?.editRecords || []
+    editRecords: versionResult?.editRecords || [],
+    deltaResult: versionResult?.deltaResult || null,
+    parentVersionId: versionResult?.parentVersionId || version.parentVersionId || null,
+    mergeMode: versionResult?.mergeMode || version.mergeMode || "replace",
+    mergeConflicts: versionResult?.mergeConflicts || [],
+    mergeSummary: versionResult?.mergeSummary || null
+  };
+}
+
+function hasResultOutput(result) {
+  return Boolean(
+    result?.modifiedHtml ||
+      result?.patches?.length ||
+      Object.keys(result?.cssVars || {}).length ||
+      (result?.cssRules || []).length
+  );
+}
+
+function cloneJson(value) {
+  if (!value) {
+    return null;
+  }
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch (_error) {
+    return null;
+  }
+}
+
+function patchTargetKey(op = {}) {
+  return op.s || `${op.op || "op"}:${JSON.stringify(op.h || {})}`;
+}
+
+function reindexPatches(patches = []) {
+  return patches.map((patch, index) => ({
+    ...patch,
+    id: `p${index}`
+  }));
+}
+
+function mergeTemplateResults(baseResult, deltaResult, meta = {}) {
+  const delta = cloneJson(deltaResult) || {};
+  const base = hasResultOutput(baseResult) ? cloneJson(baseResult) : null;
+
+  if (!base) {
+    return {
+      ...delta,
+      patches: reindexPatches(delta.patches || []),
+      deltaResult: delta,
+      parentVersionId: meta.parentVersionId || null,
+      mergeMode: "replace",
+      mergeConflicts: []
+    };
+  }
+
+  const mergeConflicts = [];
+  const cssVars = { ...(base.cssVars || {}) };
+  Object.entries(delta.cssVars || {}).forEach(([name, value]) => {
+    if (Object.hasOwn(cssVars, name) && cssVars[name] !== value) {
+      mergeConflicts.push({
+        type: "css_var_override",
+        name,
+        previous: cssVars[name],
+        next: value
+      });
+    }
+    cssVars[name] = value;
+  });
+
+  const cssRules = [...(base.cssRules || [])];
+  (delta.cssRules || []).forEach((rule) => {
+    if (!cssRules.includes(rule)) {
+      cssRules.push(rule);
+    }
+  });
+
+  const destructiveByTarget = new Map();
+  (base.patches || []).forEach((patch) => {
+    if (["delete", "replace_inner", "replace_element"].includes(patch.op)) {
+      destructiveByTarget.set(patchTargetKey(patch), patch.op);
+    }
+  });
+  (delta.patches || []).forEach((patch) => {
+    const previous = destructiveByTarget.get(patchTargetKey(patch));
+    if (previous) {
+      mergeConflicts.push({
+        type: "target_after_destructive_patch",
+        target: patchTargetKey(patch),
+        previousOperation: previous,
+        nextOperation: patch.op
+      });
+    }
+  });
+
+  const patches = reindexPatches([...(base.patches || []), ...(delta.patches || [])]);
+  const editRecords = [...(base.editRecords || []), ...(delta.editRecords || [])];
+  const basePrompt = base.sourcePrompt || "";
+  const nextPrompt = delta.sourcePrompt || meta.userPrompt || "";
+
+  return {
+    ...delta,
+    patches,
+    cssVars,
+    cssRules,
+    modifiedHtml: delta.modifiedHtml || "",
+    editRecords,
+    deltaResult: delta,
+    parentVersionId: meta.parentVersionId || null,
+    mergeMode: "merge",
+    mergeConflicts,
+    sourcePrompt: nextPrompt,
+    changesSummary: delta.changesSummary || "Applied template update.",
+    mergeSummary: {
+      basePrompt,
+      nextPrompt,
+      basePatchCount: (base.patches || []).length,
+      deltaPatchCount: (delta.patches || []).length,
+      cumulativePatchCount: patches.length,
+      conflictCount: mergeConflicts.length
+    }
   };
 }
 
@@ -458,13 +577,7 @@ async function rollbackToVersion(payload) {
   }
 
   const result = version.result;
-  const hasPageResult =
-    Boolean(result.modifiedHtml) ||
-    Boolean(result.patches?.length) ||
-    Boolean(Object.keys(result.cssVars || {}).length) ||
-    Boolean(result.cssRules?.length);
-
-  if (!hasPageResult) {
+  if (!hasResultOutput(result)) {
     throw new Error("This version does not contain a page layout to restore.");
   }
 
@@ -494,6 +607,10 @@ async function updatePopupVersionResult(tabStateKey, versionId, result) {
     return {
       ...version,
       result,
+      deltaResult: result?.deltaResult || null,
+      baseResult: null,
+      parentVersionId: result?.parentVersionId || version.parentVersionId || null,
+      mergeMode: result?.mergeMode || version.mergeMode || "replace",
       pending: false
     };
   };
@@ -604,6 +721,8 @@ async function startProcessJob(payload) {
     tabStateKey: payload.tabStateKey || "",
     userPrompt: payload.user_prompt || "",
     selectedMode: payload.selected_mode || null,
+    baseResult: payload.baseResult || null,
+    parentVersionId: payload.parentVersionId || null,
     createdAt: new Date().toISOString()
   });
 
@@ -666,7 +785,9 @@ async function finalizeJob(message) {
     promptVersionId,
     tabStateKey,
     userPrompt,
-    selectedMode
+    selectedMode,
+    baseResult,
+    parentVersionId
   } = job;
 
   try {
@@ -715,7 +836,7 @@ async function finalizeJob(message) {
       data.result?.changes_made?.join?.(", ") ||
       (data.result?.summary ? data.result.summary : "");
 
-    const versionResult = {
+    const deltaResult = {
       patches,
       cssVars,
       cssRules,
@@ -729,6 +850,10 @@ async function finalizeJob(message) {
       pageSnapshot: data.result?.snapshot || {},
       editRecords: data.result?.edit_records || []
     };
+    const versionResult = mergeTemplateResults(baseResult, deltaResult, {
+      parentVersionId,
+      userPrompt
+    });
 
     await cachePageResult(pageUrl, versionResult);
     await updatePopupVersionResult(tabStateKey, promptVersionId, versionResult);

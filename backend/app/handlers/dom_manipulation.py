@@ -32,27 +32,153 @@ from ..state.models import PageIdentity, canonicalize_page_identity, snapshot_fo
 logger = get_logger(__name__)
 
 
+def _compact_text(value: object, limit: int = 160) -> str:
+    return " ".join(str(value or "").split())[:limit]
+
+
+def _classes(value: object) -> list[str]:
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item)]
+    if isinstance(value, str):
+        return [item for item in value.split() if item]
+    return []
+
+
+def _tag_text(tag, limit: int = 240) -> str:
+    return _compact_text(tag.get_text(" ", strip=True) if tag else "", limit)
+
+
+def _selected_text(element: dict, limit: int = 240) -> str:
+    return _compact_text(element.get("visibleText") or "", limit)
+
+
+def _score_selected_candidate(tag, element: dict) -> int:
+    score = 0
+    if not tag:
+        return score
+
+    selected_id = str(element.get("id") or "")
+    if selected_id and tag.get("id") == selected_id:
+        score += 60
+
+    selected_tag = str(element.get("tagName") or "").lower()
+    if selected_tag and tag.name == selected_tag:
+        score += 20
+
+    selected_classes = set(_classes(element.get("classes")))
+    tag_classes = set(_classes(tag.get("class", [])))
+    score += min(len(selected_classes & tag_classes), 6) * 8
+
+    selected_text = _selected_text(element)
+    tag_text = _tag_text(tag)
+    if selected_text and tag_text:
+        if selected_text == tag_text:
+            score += 45
+        elif selected_text in tag_text or tag_text in selected_text:
+            score += 24
+
+    for name, value in (element.get("attributes") or {}).items():
+        if value and str(tag.get(name) or "") == str(value):
+            score += 10
+    for name, value in (element.get("dataAttributes") or {}).items():
+        if value and str(tag.get(name) or "") == str(value):
+            score += 12
+
+    return score
+
+
+def _resolve_selected_element(soup, element: dict):
+    candidates = []
+
+    for selector in element.get("selectorCandidates") or []:
+        try:
+            matches = soup.select(selector)
+        except Exception:
+            matches = []
+        candidates.extend(matches)
+        if len(matches) == 1:
+            return matches[0], "unique selector", _score_selected_candidate(matches[0], element)
+
+    selected_id = str(element.get("id") or "")
+    if selected_id:
+        match = soup.find(id=selected_id)
+        if match is not None:
+            candidates.append(match)
+
+    tag_name = str(element.get("tagName") or "").lower()
+    class_names = _classes(element.get("classes"))[:3]
+    if tag_name and class_names:
+        try:
+            candidates.extend(soup.select(f"{tag_name}.{'.'.join(class_names)}"))
+        except Exception:
+            pass
+
+    ranked = sorted(
+        ({id(candidate): candidate for candidate in candidates}.values()),
+        key=lambda candidate: _score_selected_candidate(candidate, element),
+        reverse=True,
+    )
+    if not ranked:
+        return None, "unresolved", 0
+
+    best = ranked[0]
+    best_score = _score_selected_candidate(best, element)
+    second_score = _score_selected_candidate(ranked[1], element) if len(ranked) > 1 else -1
+    if best_score >= 32 and best_score > second_score:
+        return best, "scored match", best_score
+
+    return None, "ambiguous", best_score
+
+
+def _compact_json(value: object, limit: int = 900) -> str:
+    text = json.dumps(value or {}, ensure_ascii=False, separators=(",", ":"))
+    return text[:limit]
+
+
+def _selected_capture_summary(element: dict) -> dict:
+    return {
+        "capturedTag": element.get("tagName") or "",
+        "capturedId": element.get("id") or "",
+        "capturedClasses": (element.get("classes") or [])[:6],
+        "visibleText": _selected_text(element, 180),
+        "attributes": element.get("attributes") or {},
+        "dataAttributes": element.get("dataAttributes") or {},
+        "boundingBox": element.get("boundingBox") or {},
+        "computedStyles": element.get("computedStyles") or {},
+        "domContext": element.get("domContext") or {},
+        "screenshotContext": element.get("screenshotContext") or {},
+    }
+
+
 def _selected_element_context(soup, selected_elements: list[dict]) -> str:
     """Resolve popup-selected element references to skeleton anchor ids."""
 
+    selected_elements = [element for element in (selected_elements or []) if element.get("reference")]
+    if not selected_elements:
+        return ""
+
     lines: list[str] = []
-    for element in selected_elements or []:
+    lines.extend([
+        "Selection resolution policy:",
+        "- Treat selected elements as precise user targets, not suggestions.",
+        "- If there is one selected element, vague words like this/it/selected element target that element.",
+        "- If there are multiple selected elements, quoted references target exact elements; these/all selected targets all selected elements.",
+        "- If multiple elements are selected and the prompt uses singular this/it without a reference, target the most recently selected element.",
+        "- Prefer the resolved @anchor ids below. Only choose another element if the selected target is unresolved.",
+        "",
+        "Resolved selected targets:",
+    ])
+
+    latest_reference = str(selected_elements[-1].get("reference") or "").strip()
+    for element in selected_elements:
         reference = str(element.get("reference") or "").strip()
         if not reference:
             continue
-        resolved = None
-        for selector in element.get("selectorCandidates") or []:
-            try:
-                matches = soup.select(selector)
-            except Exception:
-                matches = []
-            if len(matches) == 1:
-                resolved = matches[0]
-                break
+        resolved, resolution, score = _resolve_selected_element(soup, element)
         if resolved is None:
             lines.append(
-                f"- '{reference}' could not be resolved exactly; use visible text "
-                f"{element.get('visibleText', '')!r} only as a hint."
+                f"- '{reference}' could not be resolved ({resolution}, score={score}). "
+                f"Captured context={_compact_json(_selected_capture_summary(element), 1000)}"
             )
             continue
         anchor = resolved.get(ANCHOR_ATTR)
@@ -61,9 +187,11 @@ def _selected_element_context(soup, selected_elements: list[dict]) -> str:
         dom_id = resolved.get("id", "")
         classes = ".".join(resolved.get("class", [])[:4])
         label = f"<{tag}{'#' + dom_id if dom_id else ''}{'.' + classes if classes else ''}>"
+        latest = " latest-selected" if reference == latest_reference else ""
         lines.append(
-            f"- '{reference}' means @{anchor} {label} "
-            f"text={text!r}. When the user mentions '{reference}', target @{anchor}."
+            f"- '{reference}'{latest} => @{anchor} {label}; "
+            f"resolution={resolution}; score={score}; resolvedText={text!r}; "
+            f"capturedContext={_compact_json(_selected_capture_summary(element), 1200)}"
         )
     return "\n".join(lines)
 
