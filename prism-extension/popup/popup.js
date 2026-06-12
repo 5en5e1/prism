@@ -26,9 +26,9 @@ const CHARS_PER_TOKEN = 4;
 const HTML_CACHE_KEY = "domHtmlCache";
 const POPUP_TAB_STATE_KEY = "popupTabPromptState";
 const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
-// Modes are owned by the backend. We fetch [{key,label}] and render buttons;
-// the chosen key is sent and the backend resolves its instruction. No
-// instruction text lives here. `modeButtons` is populated by renderModes().
+// Style templates are fetched as [{key,label}] and rendered as visual presets;
+// the chosen key is sent to the processing API, which resolves the instruction.
+// No instruction text lives here. `modeButtons` is populated by renderModes().
 let modeList = [];
 let modeButtons = [];
 let modeToggle = null;
@@ -61,7 +61,7 @@ function renderModes(modes) {
 
   const toggleLabel = document.createElement("span");
   toggleLabel.className = "mode-picker-label";
-  toggleLabel.textContent = "Template";
+  toggleLabel.textContent = "Style";
 
   const toggleValue = document.createElement("span");
   toggleValue.className = "mode-picker-value";
@@ -103,7 +103,7 @@ function renderModeOptions() {
     clearButton.dataset.mode = "";
     clearButton.setAttribute("role", "radio");
     clearButton.setAttribute("aria-checked", "false");
-    clearButton.textContent = "No template";
+    clearButton.textContent = "No style template";
     clearButton.addEventListener("click", () => setSelectedMode(null));
     modeOptionsList.append(clearButton);
   }
@@ -134,8 +134,8 @@ function renderTemplatePaneContent(options = {}) {
   modeSearchInput = document.createElement("input");
   modeSearchInput.type = "search";
   modeSearchInput.className = "mode-search";
-  modeSearchInput.placeholder = "Search templates";
-  modeSearchInput.setAttribute("aria-label", "Search templates");
+  modeSearchInput.placeholder = "Search style templates";
+  modeSearchInput.setAttribute("aria-label", "Search style templates");
   modeSearchInput.value = modeSearchQuery;
   modeSearchInput.addEventListener("input", () => {
     modeSearchQuery = modeSearchInput.value;
@@ -145,11 +145,11 @@ function renderTemplatePaneContent(options = {}) {
   modeOptionsList = document.createElement("div");
   modeOptionsList.className = "mode-options";
   modeOptionsList.setAttribute("role", "radiogroup");
-  modeOptionsList.setAttribute("aria-label", "Templates");
+  modeOptionsList.setAttribute("aria-label", "Style templates");
 
   modeEmptyState = document.createElement("p");
   modeEmptyState.className = "mode-empty";
-  modeEmptyState.textContent = "No matching templates";
+  modeEmptyState.textContent = "No matching style templates";
   modeEmptyState.hidden = true;
 
   detailActions.append(modeSearchInput, modeOptionsList, modeEmptyState);
@@ -167,7 +167,7 @@ async function loadModes() {
     if (res?.ok && Array.isArray(res.modes)) {
       renderModes(res.modes);
       if (!res.modes.length) {
-        setComposerStatus("No modes configured on the backend.", "error");
+        setComposerStatus("No style templates are configured.", "error");
       }
       return;
     }
@@ -674,7 +674,7 @@ function syncModePickerUi() {
 
   const value = modeToggle?.querySelector('[data-role="mode-value"]');
   if (value) {
-    value.textContent = label || "Choose template";
+    value.textContent = label || "Choose style";
     value.classList.toggle("empty", !label);
   }
 
@@ -749,7 +749,7 @@ function renderPromptTags() {
   const remove = document.createElement("button");
   remove.type = "button";
   remove.dataset.action = "clear-mode";
-  remove.setAttribute("aria-label", "Clear selected template");
+  remove.setAttribute("aria-label", "Clear selected style template");
   remove.textContent = "x";
 
   chip.append(label, remove);
@@ -848,7 +848,7 @@ function collapseDetailPane() {
 function openTemplatePane(options = {}) {
   activeDetailKind = "templates";
   expandedVersionId = null;
-  detailMode.textContent = "Template";
+  detailMode.textContent = "Style template";
   detailMode.hidden = false;
   detailText.textContent = "";
   detailText.hidden = true;
@@ -1864,7 +1864,7 @@ applyPrompt.addEventListener("click", async () => {
   // (instructions live server-side) and comes back as a clear EMPTY_PROMPT
   // error, surfaced via the normal error path below.
   if (!mode && !userPrompt) {
-    setComposerStatus("Write a prompt or choose a mode first.", "error", true);
+    setComposerStatus("Write a prompt or choose a style template first.", "error", true);
     promptInput.focus();
     return;
   }

@@ -1,24 +1,24 @@
 # Prism
 
-Prism is a Chrome extension plus local backend for changing live webpages with AI-assisted DOM patches. The project is not production-ready yet, but this version is a much better foundation than the original prototype: the main flow now works end to end, the UI is cleaner, templates are owned by the backend, and users can point the AI at exact page elements by clicking them.
+Prism is a Chrome extension plus local AI style engine for changing live webpages with AI-assisted DOM patches. The project is not production-ready yet, but this version is a much better foundation than the original prototype: the main flow now works end to end, the UI is cleaner, style templates provide visual design presets, and users can point the AI at exact page elements by clicking them.
 
 ## Current Status
 
 We successfully completed the current rebuild steps:
 
-- Backend-configured templates are available through `/api/v1/modes`.
-- The popup can fetch and apply state-of-the-art prompt templates such as Modern, Futuristic, Cartoon, and Solarpunk.
+- Style templates are available through `/api/v1/modes` as visual design presets.
+- The popup can fetch and apply visual style templates such as Modern, Futuristic, Cartoon, and Solarpunk.
 - Users can click page elements, reference them in the prompt, and ask the AI to modify those exact elements.
 - Element selection now supports deselection and does not duplicate the same element.
 - Saves/history are available in the popup, with restore and delete actions.
-- The popup UI was improved with a slide-out detail pane for saves and templates.
+- The popup UI was improved with a slide-out detail pane for saves and style templates.
 - Page outputs are cached locally so the extension can re-apply saved changes.
 
 This is still an active development build. It is not ready for production distribution, but it is now a better and more practical version of the product direction.
 
 ## What Prism Does
 
-Prism lets a user open the extension on a webpage, write a prompt, optionally choose a backend template, and generate changes for the current page.
+Prism lets a user open the extension on a webpage, write a prompt, optionally choose a style template, and generate changes for the current page.
 
 The important workflow is:
 
@@ -26,19 +26,19 @@ The important workflow is:
 2. Open the Prism extension.
 3. Optionally click `Pick` and select elements on the page.
 4. Write a prompt that references selected elements, for example: `make 'element1' look like a floating glass card`.
-5. Choose a template if useful.
+5. Choose a style template if useful.
 6. Generate the change.
 7. Restore or delete saved versions from the popup.
 
-## Templates
+## Style Templates
 
-Templates live in the backend, not in the extension UI. The extension fetches the available templates from:
+Style templates are visual design presets. The extension fetches the available style templates from:
 
 ```text
 GET /api/v1/modes
 ```
 
-Template prompt files are stored here:
+Style-template prompt files are stored here:
 
 ```text
 backend/app/prompts/modes/
@@ -51,7 +51,7 @@ Current examples include:
 - `cartoon.md`
 - `solarpunk.md`
 
-This makes templates easy to change without rebuilding the extension. The popup only sends the selected template key; the backend resolves the actual instruction.
+This makes visual presets easy to change without rebuilding the extension. The popup only sends the selected style-template key; the processing layer resolves the actual instruction.
 
 ## Element References
 
@@ -164,7 +164,7 @@ http://127.0.0.1:8000
 1. Open a normal `http` or `https` webpage.
 2. Click the Prism extension icon.
 3. Write a prompt.
-4. Optionally choose a template.
+4. Optionally choose a style template.
 5. Optionally use `Pick` to select exact page elements.
 6. Click `Generate`.
 
