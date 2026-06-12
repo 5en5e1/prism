@@ -114,7 +114,7 @@ The next direction is to design a cheap method for whole-website modification wi
 ### 1. Clone The Repo
 
 ```bash
-git clone <repo-url>
+git clone https://github.com/5en5e1/prism.git
 cd prism
 ```
 
