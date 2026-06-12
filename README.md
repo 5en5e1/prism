@@ -207,3 +207,7 @@ Important backend files:
 - Benchmark multiple models, including nano-level models and larger models.
 - Improve output quality while keeping generation cost low.
 - Design full website coverage so Prism can modify a whole site, not only one page at a time.
+
+## License
+
+Prism is licensed under the MIT License. See [LICENSE](LICENSE).
