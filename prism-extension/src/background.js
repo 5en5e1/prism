@@ -137,6 +137,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     return true;
   }
 
+  if (message?.type === "ELEMENT_DESELECTED") {
+    deselectElement(message.payload, _sender)
+      .then(sendResponse)
+      .catch((error) => sendResponse(toErrorResponse(error)));
+    return true;
+  }
+
   if (message?.type === "ELEMENT_SELECTION_CANCELLED") {
     cancelElementSelection({ tabId: _sender.tab?.id })
       .then(sendResponse)
@@ -213,6 +220,28 @@ function insertReferenceIntoText(text, reference, start, end) {
   };
 }
 
+function referencePattern(reference, flags = "") {
+  const escaped = String(reference || "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(^|\\s)'?${escaped}'?(?=$|[\\s.,;:!?])`, flags);
+}
+
+function replacePromptReference(text, oldReference, newReference) {
+  if (oldReference === newReference) {
+    return text;
+  }
+  return String(text || "").replace(
+    referencePattern(oldReference, "g"),
+    (_match, leading) => `${leading}'${newReference}'`
+  );
+}
+
+function removeReferenceFromText(text, reference) {
+  return String(text || "")
+    .replace(referencePattern(reference, "g"), " ")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
 function nextElementReference(elements = []) {
   const used = new Set(
     elements
@@ -241,6 +270,19 @@ function normalizePopupState(state = {}) {
     selectionMode: false,
     ...state
   };
+}
+
+function compactSelectedElementsForPrompt(elements = [], promptText = "") {
+  let text = promptText;
+  const selectedElements = elements.map((element, index) => {
+    const reference = `element${index + 1}`;
+    if (element.reference !== reference) {
+      text = replacePromptReference(text, element.reference, reference);
+      return { ...element, reference };
+    }
+    return element;
+  });
+  return { selectedElements, promptText: text };
 }
 
 async function beginElementSelection(payload = {}) {
@@ -354,6 +396,17 @@ async function finishElementSelection(payload = {}, sender = {}) {
   const tabState = data[POPUP_TAB_STATE_KEY] || {};
   const state = normalizePopupState(tabState[session.tabStateKey]);
   const existing = Array.isArray(state.selectedElements) ? state.selectedElements : [];
+  const duplicate = existing.find((element) => {
+    return (
+      (record.fingerprint && element.fingerprint === record.fingerprint) ||
+      (record.id && element.id === record.id && record.tagName === element.tagName)
+    );
+  });
+
+  if (duplicate) {
+    return deselectElement({ reference: duplicate.reference }, sender);
+  }
+
   const selectedElements = [
     ...existing.filter((element) => element.reference !== record.reference),
     record
@@ -380,7 +433,62 @@ async function finishElementSelection(payload = {}, sender = {}) {
 
   await saveElementSelectionSessions(sessions);
   await chrome.storage.local.set({ [POPUP_TAB_STATE_KEY]: tabState });
-  return { ok: true, reference: record.reference, nextReference };
+  return { ok: true, reference: record.reference, nextReference, selectedElements };
+}
+
+async function deselectElement(payload = {}, sender = {}) {
+  const tabId = sender.tab?.id;
+  if (typeof tabId !== "number") {
+    throw new Error("Deselected element did not come from a tab.");
+  }
+
+  const sessions = await getElementSelectionSessions();
+  const session = sessions[String(tabId)];
+  if (!session) {
+    throw new Error("No active element selection session.");
+  }
+
+  const reference = payload.reference || "";
+  const data = await chrome.storage.local.get(POPUP_TAB_STATE_KEY);
+  const tabState = data[POPUP_TAB_STATE_KEY] || {};
+  const state = normalizePopupState(tabState[session.tabStateKey]);
+  const existing = Array.isArray(state.selectedElements) ? state.selectedElements : [];
+  const promptText = typeof state.draftPrompt === "string" ? state.draftPrompt : session.promptText;
+  const promptWithoutReference = removeReferenceFromText(promptText, reference);
+  const compacted = compactSelectedElementsForPrompt(
+    existing.filter((element) => element.reference !== reference),
+    promptWithoutReference
+  );
+  const nextReference = nextElementReference(compacted.selectedElements);
+  const cursor = compacted.promptText.length;
+
+  tabState[session.tabStateKey] = {
+    ...state,
+    draftPrompt: compacted.promptText,
+    selectedElements: compacted.selectedElements,
+    nextElementIndex: Number(nextReference.replace(/^element/, "")) || compacted.selectedElements.length + 1,
+    promptSelectionStart: cursor,
+    promptSelectionEnd: cursor,
+    selectionMode: true
+  };
+
+  sessions[String(tabId)] = {
+    ...session,
+    promptText: compacted.promptText,
+    selectionStart: cursor,
+    selectionEnd: cursor,
+    nextReference
+  };
+
+  await saveElementSelectionSessions(sessions);
+  await chrome.storage.local.set({ [POPUP_TAB_STATE_KEY]: tabState });
+  return {
+    ok: true,
+    deselected: true,
+    reference,
+    nextReference,
+    selectedElements: compacted.selectedElements
+  };
 }
 
 async function setJobStatus(state, message, extra = {}) {

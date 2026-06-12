@@ -12,12 +12,14 @@ const historyList = document.querySelector("#historyList");
 const detailPane = document.querySelector("#detailPane");
 const detailText = document.querySelector("#detailText");
 const detailMode = document.querySelector("#detailMode");
+const detailActions = document.querySelector("#detailActions");
 const openSettings = document.querySelector("#openSettings");
 const clearAllPopupCache = document.querySelector("#clearAllPopupCache");
 const startElementPick = document.querySelector("#startElementPick");
 const cancelElementPick = document.querySelector("#cancelElementPick");
 const clearSelectedElements = document.querySelector("#clearSelectedElements");
 const selectedElementsList = document.querySelector("#selectedElementsList");
+const promptTags = document.querySelector("#promptTags");
 
 const TOKEN_LIMIT = 1000000;
 const CHARS_PER_TOKEN = 4;
@@ -29,7 +31,11 @@ const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
 // instruction text lives here. `modeButtons` is populated by renderModes().
 let modeList = [];
 let modeButtons = [];
-let modeSelect = null;
+let modeToggle = null;
+let modePanel = null;
+let modeSearchInput = null;
+let modeOptionsList = null;
+let modeEmptyState = null;
 
 function knownModeKeys() {
   return new Set(modeList.map((m) => m.key));
@@ -39,38 +45,121 @@ function renderModes(modes) {
   modeList = Array.isArray(modes) ? modes : [];
   modeRow.innerHTML = "";
   modeButtons = [];
+  modeToggle = null;
+  modePanel = null;
+  modeSearchInput = null;
+  modeOptionsList = null;
+  modeEmptyState = null;
 
-  const shell = document.createElement("label");
+  const shell = document.createElement("div");
   shell.className = "mode-picker";
+  shell.dataset.expanded = "false";
 
-  const label = document.createElement("span");
-  label.className = "mode-picker-label";
-  label.textContent = "Template";
+  modeToggle = document.createElement("button");
+  modeToggle.type = "button";
+  modeToggle.className = "mode-picker-toggle";
+  modeToggle.setAttribute("aria-expanded", "false");
+  modeToggle.setAttribute("aria-controls", "modePickerPanel");
 
-  modeSelect = document.createElement("select");
-  modeSelect.className = "mode-select";
-  modeSelect.setAttribute("aria-label", "Template");
+  const toggleLabel = document.createElement("span");
+  toggleLabel.className = "mode-picker-label";
+  toggleLabel.textContent = "Template";
 
-  const defaultOption = document.createElement("option");
-  defaultOption.value = "";
-  defaultOption.textContent = "No template";
-  modeSelect.append(defaultOption);
+  const toggleValue = document.createElement("span");
+  toggleValue.className = "mode-picker-value";
+  toggleValue.dataset.role = "mode-value";
 
-  modeList.forEach((m) => {
-    const option = document.createElement("option");
-    option.value = m.key;
-    option.textContent = m.label;
-    modeSelect.append(option);
+  const toggleArrow = document.createElement("span");
+  toggleArrow.className = "mode-picker-arrow";
+  toggleArrow.setAttribute("aria-hidden", "true");
+
+  modeToggle.append(toggleLabel, toggleValue, toggleArrow);
+  modeToggle.addEventListener("click", () => {
+    setModePickerExpanded(shell.dataset.expanded !== "true");
   });
 
-  modeSelect.addEventListener("change", () => {
-    setSelectedMode(modeSelect.value || null);
-  });
+  modePanel = document.createElement("div");
+  modePanel.id = "modePickerPanel";
+  modePanel.className = "mode-picker-panel";
+  modePanel.hidden = true;
 
-  shell.append(label, modeSelect);
+  modeSearchInput = document.createElement("input");
+  modeSearchInput.type = "search";
+  modeSearchInput.className = "mode-search";
+  modeSearchInput.placeholder = "Search templates";
+  modeSearchInput.setAttribute("aria-label", "Search templates");
+  modeSearchInput.addEventListener("input", renderModeOptions);
+
+  modeOptionsList = document.createElement("div");
+  modeOptionsList.className = "mode-options";
+  modeOptionsList.setAttribute("role", "radiogroup");
+  modeOptionsList.setAttribute("aria-label", "Templates");
+
+  modeEmptyState = document.createElement("p");
+  modeEmptyState.className = "mode-empty";
+  modeEmptyState.textContent = "No matching templates";
+  modeEmptyState.hidden = true;
+
+  modePanel.append(modeSearchInput, modeOptionsList, modeEmptyState);
+  shell.append(modeToggle, modePanel);
   modeRow.append(shell);
-  // Re-assert any restored template selection now that the picker exists.
+  renderModeOptions();
   setSelectedMode(normalizeMode(selectedMode), false);
+
+  function setModePickerExpanded(expanded) {
+    shell.dataset.expanded = String(expanded);
+    modeToggle.setAttribute("aria-expanded", String(expanded));
+    modePanel.hidden = !expanded;
+    if (expanded) {
+      modeSearchInput.focus();
+      modeSearchInput.select();
+    }
+  }
+}
+
+function renderModeOptions() {
+  if (!modeOptionsList) {
+    return;
+  }
+
+  const query = (modeSearchInput?.value || "").trim().toLowerCase();
+  const filtered = modeList.filter((mode) => {
+    const label = String(mode.label || "").toLowerCase();
+    const key = String(mode.key || "").toLowerCase();
+    return !query || label.includes(query) || key.includes(query);
+  });
+
+  modeOptionsList.replaceChildren();
+  modeButtons = [];
+
+  if (selectedMode) {
+    const clearButton = document.createElement("button");
+    clearButton.type = "button";
+    clearButton.className = "mode-option clear";
+    clearButton.dataset.mode = "";
+    clearButton.setAttribute("role", "radio");
+    clearButton.setAttribute("aria-checked", "false");
+    clearButton.textContent = "No template";
+    clearButton.addEventListener("click", () => setSelectedMode(null));
+    modeOptionsList.append(clearButton);
+  }
+
+  filtered.forEach((mode) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "mode-option";
+    button.dataset.mode = mode.key;
+    button.setAttribute("role", "radio");
+    button.textContent = mode.label;
+    button.addEventListener("click", () => setSelectedMode(mode.key));
+    modeButtons.push(button);
+    modeOptionsList.append(button);
+  });
+
+  if (modeEmptyState) {
+    modeEmptyState.hidden = Boolean(filtered.length);
+  }
+  syncModePickerUi();
 }
 
 async function loadModes() {
@@ -296,7 +385,7 @@ function getSiteKey(url) {
   return parsedUrl.origin;
 }
 
-// Templates are per-page (origin + path) so /projects/ keeps its own
+// Saves are per-page (origin + path) so /projects/ keeps its own
 // versions, separate from / on the same site — matching how the HTML
 // cache is keyed. Non-URL tabs (chrome://, new tab) fall back to tab id.
 function pageStateKey(tab) {
@@ -575,16 +664,30 @@ function scheduleDraftSave() {
   }, 150);
 }
 
-function setSelectedMode(mode, shouldPersist = true) {
-  selectedMode = normalizeMode(mode);
+function syncModePickerUi() {
+  const label = modeLabel(selectedMode);
 
   modeButtons.forEach((button) => {
     const isSelected = button.dataset.mode === selectedMode;
     button.classList.toggle("selected", isSelected);
     button.setAttribute("aria-checked", String(isSelected));
   });
-  if (modeSelect) {
-    modeSelect.value = selectedMode || "";
+
+  const value = modeToggle?.querySelector('[data-role="mode-value"]');
+  if (value) {
+    value.textContent = label || "Choose template";
+    value.classList.toggle("empty", !label);
+  }
+
+  renderPromptTags();
+}
+
+function setSelectedMode(mode, shouldPersist = true) {
+  selectedMode = normalizeMode(mode);
+  if (modeOptionsList) {
+    renderModeOptions();
+  } else {
+    syncModePickerUi();
   }
 
   if (shouldPersist) {
@@ -630,6 +733,31 @@ function createTextElement(className, text) {
   return element;
 }
 
+function renderPromptTags() {
+  promptTags.replaceChildren();
+
+  if (!selectedMode) {
+    promptTags.hidden = true;
+    return;
+  }
+
+  const chip = document.createElement("span");
+  chip.className = "prompt-tag";
+
+  const label = document.createElement("span");
+  label.textContent = modeLabel(selectedMode) || selectedMode;
+
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.dataset.action = "clear-mode";
+  remove.setAttribute("aria-label", "Clear selected template");
+  remove.textContent = "x";
+
+  chip.append(label, remove);
+  promptTags.append(chip);
+  promptTags.hidden = false;
+}
+
 function detailContentFor(version) {
   let text = "";
   if (version.kind === "original") {
@@ -652,6 +780,42 @@ function detailContentFor(version) {
   return { text, mode: version.mode ? modeLabel(version.mode) : "" };
 }
 
+function createVersionActionButton(label, action, versionId, className = "") {
+  const button = document.createElement("button");
+  button.className = `version-menu-item ${className}`.trim();
+  button.type = "button";
+  button.dataset.action = action;
+  button.dataset.versionId = versionId;
+  button.textContent = label;
+  return button;
+}
+
+function renderDetailActions(version, placement) {
+  detailActions.replaceChildren();
+  const buttons = [];
+
+  if (placement === "history") {
+    const canRestore = isOriginalVersion(version) || Boolean(version.prompt || version.mode);
+    const restore = createVersionActionButton("Restore", "rollback", version.id);
+    restore.disabled = version.pending || !canRestore;
+    buttons.push(restore);
+  }
+
+  if (!isOriginalVersion(version)) {
+    buttons.push(
+      createVersionActionButton(
+        "Delete",
+        placement === "history" ? "delete-history" : "delete-current",
+        version.id,
+        "danger"
+      )
+    );
+  }
+
+  detailActions.hidden = !buttons.length;
+  detailActions.append(...buttons);
+}
+
 // Which card's detail is currently expanded in the side pane (null = closed).
 let expandedVersionId = null;
 
@@ -662,11 +826,16 @@ function collapseDetailPane() {
   document
     .querySelectorAll(".version-card.detail-active")
     .forEach((el) => el.classList.remove("detail-active"));
+  detailActions.replaceChildren();
+  detailActions.hidden = true;
 }
 
-function openDetailPane(version) {
+function openDetailPane(version, placement) {
   const { text, mode } = detailContentFor(version);
-  if (!text && !mode) {
+  const hasActions =
+    placement === "history" ||
+    (!isOriginalVersion(version) && (placement === "current" || placement === "history"));
+  if (!text && !mode && !hasActions) {
     collapseDetailPane();
     return;
   }
@@ -674,6 +843,7 @@ function openDetailPane(version) {
   detailText.textContent = text;
   detailMode.textContent = mode;
   detailMode.hidden = !mode;
+  renderDetailActions(version, placement);
   detailPane.classList.add("open");
   detailPane.setAttribute("aria-hidden", "false");
   document
@@ -684,11 +854,11 @@ function openDetailPane(version) {
 }
 
 // Click a card to slide the pane open; click the same card again to close.
-function toggleDetailPane(version) {
+function toggleDetailPane(version, placement) {
   if (expandedVersionId === version.id) {
     collapseDetailPane();
   } else {
-    openDetailPane(version);
+    openDetailPane(version, placement);
   }
 }
 
@@ -704,6 +874,14 @@ function reconcileDetailPane() {
   if (!stillExists) {
     collapseDetailPane();
     return;
+  }
+  const placement = currentTabState.current?.id === expandedVersionId ? "current" : "history";
+  const version =
+    placement === "current"
+      ? currentTabState.current
+      : (currentTabState.history || []).find((v) => v.id === expandedVersionId);
+  if (version) {
+    renderDetailActions(version, placement);
   }
   const card = document.querySelector(
     `.version-card[data-version-id="${expandedVersionId}"]`
@@ -721,56 +899,9 @@ function versionMetaText(version, placement) {
   const count = (version.result?.patches || []).length;
   const mergeLabel = version.result?.mergeMode === "merge" || version.mergeMode === "merge"
     ? "Merged"
-    : "Template";
+    : "Generated";
   const currentLabel = placement === "current" ? "Editing" : "Saved";
   return [currentLabel, mergeLabel, count ? `${count} ops` : ""].filter(Boolean).join(" · ");
-}
-
-function appendVersionAction(actions, label, action, versionId, className = "") {
-  const button = document.createElement("button");
-  button.className = `version-menu-item ${className}`.trim();
-  button.type = "button";
-  button.dataset.action = action;
-  button.dataset.versionId = versionId;
-  button.textContent = label;
-  actions.append(button);
-}
-
-function createVersionActions(version, placement) {
-  const actions = document.createElement("div");
-  actions.className = "version-actions";
-
-  const trigger = document.createElement("button");
-  trigger.className = "version-menu-trigger";
-  trigger.type = "button";
-  trigger.setAttribute("aria-label", "Template actions");
-  trigger.textContent = "...";
-
-  const menu = document.createElement("div");
-  menu.className = "version-action-menu";
-
-  if (placement === "history") {
-    const canRestore = isOriginalVersion(version) || Boolean(version.prompt || version.mode);
-    appendVersionAction(menu, "Restore", "rollback", version.id);
-    menu.lastElementChild.disabled = version.pending || !canRestore;
-  }
-
-  if (!isOriginalVersion(version)) {
-    appendVersionAction(
-      menu,
-      "Delete",
-      placement === "history" ? "delete-history" : "delete-current",
-      version.id,
-      "danger"
-    );
-  }
-
-  if (!menu.children.length) {
-    return null;
-  }
-
-  actions.append(trigger, menu);
-  return actions;
 }
 
 function createVersionCard(version, placement) {
@@ -791,21 +922,16 @@ function createVersionCard(version, placement) {
     card.append(createTextElement("current-chip", "Editing"));
   }
 
-  const actions = createVersionActions(version, placement);
-  if (actions) {
-    card.append(actions);
-  }
-
   card.addEventListener("click", (event) => {
     // Rollback / Delete buttons keep their own behaviour.
     if (event.target.closest("button")) return;
-    toggleDetailPane(version);
+    toggleDetailPane(version, placement);
   });
   card.addEventListener("keydown", (event) => {
     if (event.key === "Enter" || event.key === " ") {
       if (event.target.closest("button")) return;
       event.preventDefault();
-      toggleDetailPane(version);
+      toggleDetailPane(version, placement);
     }
   });
   return card;
@@ -1388,7 +1514,7 @@ async function rollbackVersion(versionId) {
   if (isOriginalVersion(selected)) {
     await sendTabMessage(tab.id, { type: "CLEAR_PAGE_CACHE" });
 
-    // Keep the previously-current modified version in Templates — only the
+    // Keep the previously-current modified version in Saves — only the
     // live page resets to original, the saved versions must survive.
     const remaining = currentTabState.history.filter((version) => version.id !== versionId);
     const history = currentTabState.current
@@ -1426,7 +1552,7 @@ async function rollbackVersion(versionId) {
     }
 
     // Make the restored version current and push the previously-current one
-    // back into history — mirror the original-version branch so Templates
+    // back into history — mirror the original-version branch so Saves
     // reflects reality instead of spawning a new box.
     const remaining = currentTabState.history.filter((version) => version.id !== versionId);
     const history = currentTabState.current
@@ -1517,9 +1643,10 @@ chrome.storage.onChanged.addListener((changes, areaName) => {
   }
 
   const normalized = normalizeTabState(nextState);
-  const hasNewSelection =
-    (normalized.selectedElements || []).length > (currentTabState.selectedElements || []).length;
-  const shouldKeepLocalPrompt = hasLocalPromptActivity() && !hasNewSelection;
+  const previousSelection = (currentTabState.selectedElements || []).map((element) => element.reference).join("|");
+  const nextSelection = (normalized.selectedElements || []).map((element) => element.reference).join("|");
+  const selectionChanged = previousSelection !== nextSelection;
+  const shouldKeepLocalPrompt = hasLocalPromptActivity() && !selectionChanged;
 
   if (shouldKeepLocalPrompt) {
     normalized.draftPrompt = promptInput.value;
@@ -1624,6 +1751,13 @@ selectedElementsList.addEventListener("click", (event) => {
   });
 });
 
+promptTags.addEventListener("click", (event) => {
+  if (event.target?.dataset?.action !== "clear-mode") {
+    return;
+  }
+  setSelectedMode(null);
+});
+
 clearSelectedElements.addEventListener("click", () => {
   clearSelectedElementReferences().catch((error) => {
     setComposerStatus(error.message || "Could not clear selected elements.", "error", true);
@@ -1644,17 +1778,13 @@ cancelElementPick.addEventListener("click", () => {
   });
 });
 
-currentCache.addEventListener("click", (event) => {
+detailActions.addEventListener("click", (event) => {
   const action = event.target?.dataset?.action;
+  const versionId = event.target?.dataset?.versionId;
 
   if (action === "delete-current") {
     deleteCurrentVersion().catch((error) => setComposerStatus(error.message || "Could not delete save.", "error", true));
   }
-});
-
-historyList.addEventListener("click", (event) => {
-  const action = event.target?.dataset?.action;
-  const versionId = event.target?.dataset?.versionId;
 
   if (!versionId) {
     return;

@@ -666,6 +666,7 @@
   let selectionObserver = null;
   let selectionRefreshTimer = null;
   const selectionMarkers = new Map();
+  let selectionMarkersVisible = false;
 
   function cssEscape(value) {
     if (window.CSS?.escape) {
@@ -1146,17 +1147,13 @@
       document.documentElement.appendChild(marker);
     }
     setOverlayRect(marker, el.getBoundingClientRect());
+    marker.hidden = !selectionMarkersVisible;
     selectionMarkers.set(reference, { el, marker, record });
     ensureSelectionObserver();
   }
 
-  function hideSelectedMarkers() {
-    selectionMarkers.forEach(({ marker }) => {
-      marker.hidden = true;
-    });
-  }
-
   function restoreSelectedMarkers(records = [], visible = true) {
+    selectionMarkersVisible = Boolean(visible);
     clearSelectedElementMarkers();
     records.forEach((record) => {
       const target = findReplacementElement(record);
@@ -1184,7 +1181,7 @@
         selectionMarkers.set(reference, { el, marker, record });
       }
       const rect = el.getBoundingClientRect();
-      marker.hidden = !rectIsUsable(rect);
+      marker.hidden = !selectionMarkersVisible || !rectIsUsable(rect);
       if (!marker.hidden) {
         setOverlayRect(marker, rect);
       }
@@ -1245,6 +1242,19 @@
     stopSelectionObserverIfIdle();
   }
 
+  function selectedReferenceForElement(target) {
+    if (!target) {
+      return "";
+    }
+    const fingerprint = selectedElementFingerprint(target);
+    for (const [reference, selected] of selectionMarkers.entries()) {
+      if (selected.el === target || selected.record?.fingerprint === fingerprint) {
+        return reference;
+      }
+    }
+    return "";
+  }
+
   function handleSelectionClick(event) {
     if (!selectionState.active) {
       return;
@@ -1257,6 +1267,29 @@
     if (!target) {
       return;
     }
+
+    const selectedReference = selectedReferenceForElement(target);
+    if (selectedReference) {
+      selectionState.pending = true;
+      chrome.runtime.sendMessage({
+        type: "ELEMENT_DESELECTED",
+        payload: { reference: selectedReference }
+      }, (response) => {
+        selectionState.pending = false;
+        if (!selectionState.active) {
+          return;
+        }
+        if (chrome.runtime.lastError || response?.status === "error" || !response?.ok) {
+          stopElementSelection();
+          return;
+        }
+        selectionState.reference = response.nextReference || selectionState.reference;
+        restoreSelectedMarkers(response.selectedElements || [], true);
+        updateSelectionHighlight(selectionState.hovered);
+      });
+      return;
+    }
+
     const reference = selectionState.reference;
     const record = selectedElementRecord(target, reference);
     placeSelectedMarker(reference, target, record);
@@ -1274,6 +1307,9 @@
         return;
       }
       selectionState.reference = response.nextReference || selectionState.reference;
+      if (Array.isArray(response.selectedElements)) {
+        restoreSelectedMarkers(response.selectedElements, true);
+      }
       updateSelectionHighlight(selectionState.hovered);
     });
   }
@@ -1325,7 +1361,7 @@
       selectionHighlight.hidden = true;
     }
     if (options.hideMarkers) {
-      hideSelectedMarkers();
+      clearSelectedElementMarkers();
     }
     stopSelectionObserverIfIdle();
   }

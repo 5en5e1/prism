@@ -12,6 +12,7 @@
         <div class="detail-pane-inner">
           <span id="detailMode" class="detail-pane-badge" hidden></span>
           <p id="detailText" class="detail-pane-text"></p>
+          <div id="detailActions" class="detail-pane-actions" hidden></div>
         </div>
       </aside>
       <main class="popup-shell">
@@ -30,6 +31,7 @@
       <section class="prompt-section" aria-label="Prompt input">
         <div class="prompt-composer">
           <textarea id="promptInput" rows="5" placeholder="Move the sidebar to the top right"></textarea>
+          <div id="promptTags" class="prompt-tags" aria-label="Active prompt tags" hidden></div>
           <div id="selectedElementsList" class="selected-elements-list" aria-label="Selected page elements" hidden></div>
           <div class="composer-footer">
             <!-- Template modes are rendered dynamically from GET /api/v1/modes -->
@@ -45,10 +47,10 @@
         </div>
       </section>
 
-      <section class="saves-section" aria-label="Templates">
+      <section class="saves-section" aria-label="Saves">
         <button id="historyToggle" type="button" class="history-toggle" aria-expanded="false">
           <span id="historyArrow" aria-hidden="true">&gt;</span>
-          <span>Templates</span>
+          <span>Saves</span>
         </button>
         <div class="saves-stack">
           <div id="currentCache" class="version-list"></div>
