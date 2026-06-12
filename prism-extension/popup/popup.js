@@ -32,10 +32,10 @@ const TRACKING_QUERY_NAMES = new Set(["fbclid", "gclid", "msclkid"]);
 let modeList = [];
 let modeButtons = [];
 let modeToggle = null;
-let modePanel = null;
 let modeSearchInput = null;
 let modeOptionsList = null;
 let modeEmptyState = null;
+let modeSearchQuery = "";
 
 function knownModeKeys() {
   return new Set(modeList.map((m) => m.key));
@@ -46,20 +46,18 @@ function renderModes(modes) {
   modeRow.innerHTML = "";
   modeButtons = [];
   modeToggle = null;
-  modePanel = null;
   modeSearchInput = null;
   modeOptionsList = null;
   modeEmptyState = null;
 
   const shell = document.createElement("div");
   shell.className = "mode-picker";
-  shell.dataset.expanded = "false";
 
   modeToggle = document.createElement("button");
   modeToggle.type = "button";
   modeToggle.className = "mode-picker-toggle";
   modeToggle.setAttribute("aria-expanded", "false");
-  modeToggle.setAttribute("aria-controls", "modePickerPanel");
+  modeToggle.setAttribute("aria-controls", "detailPane");
 
   const toggleLabel = document.createElement("span");
   toggleLabel.className = "mode-picker-label";
@@ -75,46 +73,12 @@ function renderModes(modes) {
 
   modeToggle.append(toggleLabel, toggleValue, toggleArrow);
   modeToggle.addEventListener("click", () => {
-    setModePickerExpanded(shell.dataset.expanded !== "true");
+    toggleTemplatePane();
   });
 
-  modePanel = document.createElement("div");
-  modePanel.id = "modePickerPanel";
-  modePanel.className = "mode-picker-panel";
-  modePanel.hidden = true;
-
-  modeSearchInput = document.createElement("input");
-  modeSearchInput.type = "search";
-  modeSearchInput.className = "mode-search";
-  modeSearchInput.placeholder = "Search templates";
-  modeSearchInput.setAttribute("aria-label", "Search templates");
-  modeSearchInput.addEventListener("input", renderModeOptions);
-
-  modeOptionsList = document.createElement("div");
-  modeOptionsList.className = "mode-options";
-  modeOptionsList.setAttribute("role", "radiogroup");
-  modeOptionsList.setAttribute("aria-label", "Templates");
-
-  modeEmptyState = document.createElement("p");
-  modeEmptyState.className = "mode-empty";
-  modeEmptyState.textContent = "No matching templates";
-  modeEmptyState.hidden = true;
-
-  modePanel.append(modeSearchInput, modeOptionsList, modeEmptyState);
-  shell.append(modeToggle, modePanel);
+  shell.append(modeToggle);
   modeRow.append(shell);
-  renderModeOptions();
   setSelectedMode(normalizeMode(selectedMode), false);
-
-  function setModePickerExpanded(expanded) {
-    shell.dataset.expanded = String(expanded);
-    modeToggle.setAttribute("aria-expanded", String(expanded));
-    modePanel.hidden = !expanded;
-    if (expanded) {
-      modeSearchInput.focus();
-      modeSearchInput.select();
-    }
-  }
 }
 
 function renderModeOptions() {
@@ -122,7 +86,7 @@ function renderModeOptions() {
     return;
   }
 
-  const query = (modeSearchInput?.value || "").trim().toLowerCase();
+  const query = modeSearchQuery.trim().toLowerCase();
   const filtered = modeList.filter((mode) => {
     const label = String(mode.label || "").toLowerCase();
     const key = String(mode.key || "").toLowerCase();
@@ -160,6 +124,41 @@ function renderModeOptions() {
     modeEmptyState.hidden = Boolean(filtered.length);
   }
   syncModePickerUi();
+}
+
+function renderTemplatePaneContent(options = {}) {
+  detailActions.replaceChildren();
+  detailActions.className = "detail-pane-actions template-detail-actions";
+  detailActions.hidden = false;
+
+  modeSearchInput = document.createElement("input");
+  modeSearchInput.type = "search";
+  modeSearchInput.className = "mode-search";
+  modeSearchInput.placeholder = "Search templates";
+  modeSearchInput.setAttribute("aria-label", "Search templates");
+  modeSearchInput.value = modeSearchQuery;
+  modeSearchInput.addEventListener("input", () => {
+    modeSearchQuery = modeSearchInput.value;
+    renderModeOptions();
+  });
+
+  modeOptionsList = document.createElement("div");
+  modeOptionsList.className = "mode-options";
+  modeOptionsList.setAttribute("role", "radiogroup");
+  modeOptionsList.setAttribute("aria-label", "Templates");
+
+  modeEmptyState = document.createElement("p");
+  modeEmptyState.className = "mode-empty";
+  modeEmptyState.textContent = "No matching templates";
+  modeEmptyState.hidden = true;
+
+  detailActions.append(modeSearchInput, modeOptionsList, modeEmptyState);
+  renderModeOptions();
+
+  if (options.focusSearch) {
+    modeSearchInput.focus();
+    modeSearchInput.select();
+  }
 }
 
 async function loadModes() {
@@ -792,6 +791,7 @@ function createVersionActionButton(label, action, versionId, className = "") {
 
 function renderDetailActions(version, placement) {
   detailActions.replaceChildren();
+  detailActions.className = "detail-pane-actions";
   const buttons = [];
 
   if (placement === "history") {
@@ -816,18 +816,60 @@ function renderDetailActions(version, placement) {
   detailActions.append(...buttons);
 }
 
-// Which card's detail is currently expanded in the side pane (null = closed).
+// Which side pane content is currently expanded (null = closed).
+let activeDetailKind = null;
 let expandedVersionId = null;
 
 function collapseDetailPane() {
+  activeDetailKind = null;
   expandedVersionId = null;
   detailPane.classList.remove("open");
   detailPane.setAttribute("aria-hidden", "true");
+  detailText.hidden = false;
+  detailText.textContent = "";
+  detailMode.textContent = "";
+  detailMode.hidden = true;
   document
     .querySelectorAll(".version-card.detail-active")
     .forEach((el) => el.classList.remove("detail-active"));
   detailActions.replaceChildren();
+  detailActions.className = "detail-pane-actions";
   detailActions.hidden = true;
+  modeSearchInput = null;
+  modeOptionsList = null;
+  modeEmptyState = null;
+  modeButtons = [];
+  if (modeToggle) {
+    modeToggle.setAttribute("aria-expanded", "false");
+  }
+  syncModePickerUi();
+}
+
+function openTemplatePane(options = {}) {
+  activeDetailKind = "templates";
+  expandedVersionId = null;
+  detailMode.textContent = "Template";
+  detailMode.hidden = false;
+  detailText.textContent = "";
+  detailText.hidden = true;
+  detailPane.classList.add("open");
+  detailPane.setAttribute("aria-hidden", "false");
+  document
+    .querySelectorAll(".version-card.detail-active")
+    .forEach((el) => el.classList.remove("detail-active"));
+  if (modeToggle) {
+    modeToggle.setAttribute("aria-expanded", "true");
+  }
+  renderTemplatePaneContent(options);
+}
+
+function toggleTemplatePane() {
+  if (activeDetailKind === "templates") {
+    collapseDetailPane();
+    return;
+  }
+
+  openTemplatePane({ focusSearch: true });
 }
 
 function openDetailPane(version, placement) {
@@ -839,13 +881,22 @@ function openDetailPane(version, placement) {
     collapseDetailPane();
     return;
   }
+  activeDetailKind = "version";
   expandedVersionId = version.id;
   detailText.textContent = text;
+  detailText.hidden = false;
   detailMode.textContent = mode;
   detailMode.hidden = !mode;
   renderDetailActions(version, placement);
   detailPane.classList.add("open");
   detailPane.setAttribute("aria-hidden", "false");
+  modeSearchInput = null;
+  modeOptionsList = null;
+  modeEmptyState = null;
+  modeButtons = [];
+  if (modeToggle) {
+    modeToggle.setAttribute("aria-expanded", "false");
+  }
   document
     .querySelectorAll(".version-card.detail-active")
     .forEach((el) => el.classList.remove("detail-active"));
@@ -865,6 +916,11 @@ function toggleDetailPane(version, placement) {
 // After a re-render the cards are rebuilt; drop the pane if its version
 // is gone, otherwise re-mark the active card.
 function reconcileDetailPane() {
+  if (activeDetailKind === "templates") {
+    renderTemplatePaneContent();
+    return;
+  }
+
   if (expandedVersionId === null) {
     return;
   }

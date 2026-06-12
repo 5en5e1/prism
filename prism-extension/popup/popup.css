@@ -23,6 +23,7 @@
 body {
   margin: 0;
   min-width: 420px;
+  max-height: 600px;
   overflow: hidden;
   background:
     linear-gradient(135deg, rgba(8, 145, 178, 0.16) 0%, rgba(8, 145, 178, 0) 36%),
@@ -34,6 +35,8 @@ body {
   position: relative;
   display: flex;
   align-items: stretch;
+  max-height: 600px;
+  overflow: hidden;
   isolation: isolate;
 }
 
@@ -55,11 +58,19 @@ body {
   gap: 14px;
   width: 420px;
   flex: 0 0 420px;
+  max-height: 600px;
+  overflow-y: auto;
   padding: 16px;
+  scrollbar-color: rgba(37, 99, 235, 0.32) transparent;
+  scrollbar-width: thin;
 }
 
 .detail-pane {
+  position: sticky;
+  top: 0;
   width: 0;
+  height: 100vh;
+  max-height: 600px;
   flex: 0 0 auto;
   overflow: hidden;
   border-right: 1px solid rgba(255, 255, 255, 0.72);
@@ -77,10 +88,14 @@ body {
 
 .detail-pane-inner {
   width: 300px;
+  height: 100%;
+  overflow-y: auto;
   padding: 18px;
   opacity: 0;
   transform: translateX(-10px);
   transition: opacity 220ms ease 60ms, transform 220ms ease 60ms;
+  scrollbar-color: rgba(37, 99, 235, 0.32) transparent;
+  scrollbar-width: thin;
 }
 
 .detail-pane.open .detail-pane-inner {
@@ -118,7 +133,7 @@ body {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
-  margin-top: 14px;
+  margin: 0 0 14px;
 }
 
 .detail-pane-actions[hidden] {
@@ -131,6 +146,12 @@ body {
   justify-content: center;
   border-color: rgba(148, 163, 184, 0.2);
   background: rgba(255, 255, 255, 0.62);
+}
+
+.template-detail-actions {
+  display: grid;
+  gap: 8px;
+  margin: 0;
 }
 
 .tab-header {
@@ -401,8 +422,7 @@ button:disabled {
 }
 
 .mode-picker {
-  display: grid;
-  gap: 7px;
+  display: block;
   min-height: 34px;
   border: 1px solid rgba(148, 163, 184, 0.22);
   border-radius: 8px;
@@ -460,7 +480,7 @@ button:disabled {
   transition: transform 150ms ease;
 }
 
-.mode-picker[data-expanded="true"] .mode-picker-arrow {
+.mode-picker-toggle[aria-expanded="true"] .mode-picker-arrow {
   transform: rotate(225deg) translate(-1px, -1px);
 }
 
@@ -468,16 +488,6 @@ button:disabled {
   border-color: rgba(8, 145, 178, 0.38);
   background: rgba(255, 255, 255, 0.78);
   box-shadow: 0 8px 20px rgba(8, 145, 178, 0.1), inset 0 1px 0 rgba(255, 255, 255, 0.86);
-}
-
-.mode-picker-panel {
-  display: grid;
-  gap: 6px;
-  padding: 0 4px 4px;
-}
-
-.mode-picker-panel[hidden] {
-  display: none;
 }
 
 .mode-search {
@@ -502,7 +512,7 @@ button:disabled {
 .mode-options {
   display: grid;
   gap: 5px;
-  max-height: 154px;
+  max-height: 458px;
   overflow-y: auto;
   padding-right: 1px;
   scrollbar-color: rgba(8, 145, 178, 0.34) transparent;
