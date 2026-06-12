@@ -11,34 +11,8 @@
       <header class="page-hero">
         <p class="eyebrow">Prism</p>
         <h1>Options and cache</h1>
-        <p class="hero-copy">Configure the backend, open cached pages, or clear saved outputs and popup story.</p>
+        <p class="hero-copy">Review cached pages, open saved outputs, or clear Prism's local page history.</p>
       </header>
-
-      <section class="panel settings-panel" aria-label="Backend settings">
-        <div class="panel-heading">
-          <div>
-            <p class="eyebrow">Backend</p>
-            <h2>Connection</h2>
-          </div>
-          <p id="saveState" class="save-state" aria-live="polite"></p>
-        </div>
-
-        <label class="field-row">
-          <span>
-            <strong>API base URL</strong>
-            <small>Used for /api/v1/process, /api/v1/health, and /api/v1/modes.</small>
-          </span>
-          <input id="apiBaseUrl" type="url" placeholder="http://127.0.0.1:8000">
-        </label>
-
-        <label class="setting-row">
-          <span>
-            <strong>Enable content script</strong>
-            <small>Lets Prism run on pages matched by the manifest.</small>
-          </span>
-          <input id="enabled" type="checkbox">
-        </label>
-      </section>
 
       <section class="panel cache-panel" aria-label="Cached webpages">
         <div class="panel-heading cache-heading">

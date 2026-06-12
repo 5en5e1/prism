@@ -48,7 +48,6 @@ body::before {
 }
 
 .page-hero,
-.settings-panel,
 .cache-panel,
 .cache-card {
   border: 1px solid rgba(255, 255, 255, 0.64);
@@ -118,7 +117,6 @@ h2 {
   gap: 14px;
 }
 
-.settings-panel,
 .cache-panel {
   padding: 18px;
 }
@@ -178,65 +176,6 @@ button:disabled {
   font-size: 14px;
   font-weight: 700;
   white-space: nowrap;
-}
-
-.field-row,
-.setting-row {
-  display: flex;
-  gap: 18px;
-  align-items: center;
-  justify-content: space-between;
-  border: 1px solid rgba(203, 213, 225, 0.72);
-  border-radius: 8px;
-  padding: 14px;
-  background: rgba(255, 255, 255, 0.62);
-}
-
-.field-row {
-  align-items: flex-start;
-  flex-direction: column;
-}
-
-.field-row span,
-.setting-row span {
-  display: grid;
-  gap: 4px;
-}
-
-.field-row strong,
-.setting-row strong {
-  color: var(--ink);
-  font-size: 14px;
-}
-
-.field-row small,
-.setting-row small {
-  color: var(--muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-
-input[type="url"] {
-  width: 100%;
-  min-height: 40px;
-  border: 1px solid rgba(148, 163, 184, 0.72);
-  border-radius: 8px;
-  padding: 8px 10px;
-  color: var(--ink);
-  background: rgba(255, 255, 255, 0.86);
-  font: inherit;
-}
-
-input[type="url"]:focus {
-  border-color: rgba(37, 99, 235, 0.72);
-  outline: 3px solid rgba(37, 99, 235, 0.14);
-}
-
-input[type="checkbox"] {
-  width: 42px;
-  height: 24px;
-  flex: 0 0 auto;
-  accent-color: var(--accent);
 }
 
 .cache-list {
@@ -359,7 +298,6 @@ input[type="checkbox"] {
 
 @supports not ((backdrop-filter: blur(1px))) {
   .page-hero,
-  .settings-panel,
   .cache-panel,
   .cache-card,
   .danger-button,

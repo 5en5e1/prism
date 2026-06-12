@@ -2,16 +2,12 @@ const cacheState = document.querySelector("#cacheState");
 const cacheList = document.querySelector("#cacheList");
 const cacheEmpty = document.querySelector("#cacheEmpty");
 const clearAllCache = document.querySelector("#clearAllCache");
-const enabledInput = document.querySelector("#enabled");
-const apiBaseUrlInput = document.querySelector("#apiBaseUrl");
-const saveState = document.querySelector("#saveState");
 
 const HTML_CACHE_KEY = "domHtmlCache";
 const POPUP_TAB_STATE_KEY = "popupTabPromptState";
 const JOB_STATUS_KEY = "lastJob";
 const PENDING_JOBS_KEY = "pendingJobs";
 const MODES_CACHE_KEY = "cachedModes";
-const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
 
 function showCacheState(message) {
   cacheState.textContent = message;
@@ -19,30 +15,6 @@ function showCacheState(message) {
   showCacheState.timer = window.setTimeout(() => {
     cacheState.textContent = "";
   }, 1600);
-}
-
-function showSaveState(message) {
-  saveState.textContent = message;
-  window.clearTimeout(showSaveState.timer);
-  showSaveState.timer = window.setTimeout(() => {
-    saveState.textContent = "";
-  }, 1600);
-}
-
-async function loadSettings() {
-  const { settings = {} } = await chrome.storage.local.get("settings");
-  apiBaseUrlInput.value = settings.apiBaseUrl || DEFAULT_API_BASE_URL;
-  enabledInput.checked = settings.enabled !== false;
-}
-
-async function saveSettings() {
-  await chrome.storage.local.set({
-    settings: {
-      apiBaseUrl: apiBaseUrlInput.value.trim() || DEFAULT_API_BASE_URL,
-      enabled: enabledInput.checked
-    }
-  });
-  showSaveState("Saved");
 }
 
 function formatDate(value) {
@@ -182,14 +154,10 @@ clearAllCache.addEventListener("click", () => {
   });
 });
 
-apiBaseUrlInput.addEventListener("change", saveSettings);
-enabledInput.addEventListener("change", saveSettings);
-
 chrome.storage.onChanged.addListener((changes, areaName) => {
   if (areaName === "local" && changes[HTML_CACHE_KEY]) {
     loadCacheList().catch(() => {});
   }
 });
 
-loadSettings();
 loadCacheList();
