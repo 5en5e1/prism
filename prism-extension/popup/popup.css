@@ -251,49 +251,11 @@ body::before {
 
 .pyramid-scene::before {
   position: absolute;
-  inset: 13px 8px 4px;
+  inset: 24px 12px 8px;
   content: "";
   border-radius: 999px;
-  background: radial-gradient(ellipse at center, rgb(var(--text-rgb) / 0.08), transparent 62%);
+  background: rgb(var(--bg-rgb) / 0.24);
   filter: blur(8px);
-}
-
-.light-beam {
-  position: absolute;
-  z-index: 1;
-  height: 9px;
-  border-top: 1px solid rgb(var(--accent-rgb) / 0.34);
-  border-bottom: 1px solid rgb(var(--accent-rgb) / 0.18);
-  background: linear-gradient(90deg, transparent 0%, rgb(var(--accent-rgb) / 0.16) 18%, rgb(var(--accent-rgb) / 0.4) 54%, transparent 100%);
-  box-shadow: 0 0 18px rgb(var(--accent-rgb) / 0.22);
-  transform-origin: center;
-}
-
-.light-beam-entry {
-  top: 30px;
-  left: -12px;
-  width: 46px;
-  transform: rotate(-8deg);
-}
-
-.light-beam-exit-primary {
-  top: 31px;
-  left: 39px;
-  width: 55px;
-  opacity: 0.78;
-  transform: rotate(12deg);
-}
-
-.light-bloom {
-  position: absolute;
-  top: 22px;
-  left: 30px;
-  z-index: 4;
-  width: 21px;
-  height: 21px;
-  border-radius: 999px;
-  background: radial-gradient(circle, rgb(var(--text-rgb) / 0.34), rgb(var(--accent-rgb) / 0.28) 40%, transparent 74%);
-  filter: blur(1px);
 }
 
 .pyramid-object {
@@ -304,9 +266,6 @@ body::before {
   width: 46px;
   height: 46px;
   transform-style: preserve-3d;
-  filter:
-    drop-shadow(0 0 11px rgb(var(--accent-rgb) / 0.28))
-    drop-shadow(0 12px 15px rgb(var(--bg-rgb) / 0.5));
   animation: pyramid-spin 9s linear infinite;
 }
 
@@ -314,30 +273,60 @@ body::before {
   animation-play-state: paused;
 }
 
-.pyramid-sides {
+.pyramid-core {
   position: absolute;
   inset: 0;
   transform-style: preserve-3d;
 }
 
-.pyramid-sides span {
+.pyramid-face {
   position: absolute;
   inset: 0;
-  transform-origin: bottom;
+  transform-origin: 50% 100%;
+  backface-visibility: visible;
   clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
   background:
-    linear-gradient(130deg, rgb(var(--text-rgb) / 0.2), transparent 24%),
-    linear-gradient(180deg, rgb(var(--surface-rgb) / 0.76), rgb(var(--surface-rgb) / 0.32) 58%, rgb(var(--accent-rgb) / 0.24));
+    linear-gradient(132deg, rgb(var(--text-rgb) / 0.24), transparent 26%),
+    linear-gradient(180deg, rgb(var(--surface-rgb) / 0.82), rgb(var(--surface-rgb) / 0.34) 58%, rgb(var(--accent-rgb) / 0.22));
   box-shadow:
     inset 0 0 0 1px rgb(var(--accent-rgb) / 0.5),
-    inset 0 -10px 20px rgb(var(--bg-rgb) / 0.18),
-    0 0 10px rgb(var(--accent-rgb) / 0.2);
-  opacity: 0.78;
-  transform: rotateY(calc(90deg * var(--i))) translateZ(23px) rotateX(30deg);
+    inset 0 -12px 20px rgb(var(--bg-rgb) / 0.2);
 }
 
-.pyramid-sides span:nth-child(even) {
+.pyramid-face-front {
+  opacity: 0.82;
+  transform: rotateY(0deg) translateZ(23px) rotateX(30deg);
+}
+
+.pyramid-face-right {
   opacity: 0.58;
+  transform: rotateY(90deg) translateZ(23px) rotateX(30deg);
+}
+
+.pyramid-face-back {
+  background:
+    linear-gradient(132deg, rgb(var(--text-rgb) / 0.14), transparent 30%),
+    linear-gradient(180deg, rgb(var(--surface-rgb) / 0.42), rgb(var(--bg-rgb) / 0.3) 70%);
+  opacity: 0.36;
+  transform: rotateY(180deg) translateZ(23px) rotateX(30deg);
+}
+
+.pyramid-face-left {
+  opacity: 0.58;
+  transform: rotateY(270deg) translateZ(23px) rotateX(30deg);
+}
+
+.pyramid-base {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgb(var(--surface-rgb) / 0.5), rgb(var(--bg-rgb) / 0.42)),
+    rgb(var(--surface-rgb) / 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--accent-rgb) / 0.32),
+    0 0 14px rgb(var(--accent-rgb) / 0.12);
+  opacity: 0.62;
+  transform: rotateX(90deg) translateZ(-23px);
 }
 
 .pyramid-shadow {
@@ -347,22 +336,19 @@ body::before {
   width: 46px;
   height: 46px;
   border-radius: 999px;
-  background: rgb(var(--accent-rgb) / 0.12);
+  background: rgb(var(--bg-rgb) / 0.32);
   transform: rotateX(90deg) translateZ(-36px);
   filter: blur(7px);
-  box-shadow:
-    0 0 18px rgb(var(--accent-rgb) / 0.12),
-    0 0 28px rgb(var(--accent-rgb) / 0.16),
-    0 0 40px rgb(var(--accent-rgb) / 0.18);
+  box-shadow: 0 0 24px rgb(var(--bg-rgb) / 0.36);
 }
 
 @keyframes pyramid-spin {
   0% {
-    transform: rotateX(-30deg) rotateY(0deg);
+    transform: rotateX(-30deg) rotateY(45deg);
   }
 
   100% {
-    transform: rotateX(-30deg) rotateY(360deg);
+    transform: rotateX(-30deg) rotateY(405deg);
   }
 }
 
