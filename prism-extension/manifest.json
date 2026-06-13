@@ -1,10 +1,10 @@
 {
   "manifest_version": 3,
-  "name": "Prism",
-  "description": "Use Prism to transform the current page with AI-assisted DOM patches.",
+  "name": "Refraction Console",
+  "description": "Transform the current page with AI-assisted DOM patches.",
   "version": "0.1.0",
   "action": {
-    "default_title": "Prism",
+    "default_title": "Refraction Console",
     "default_popup": "popup/popup.html"
   },
   "commands": {
@@ -12,7 +12,7 @@
       "suggested_key": {
         "default": "Ctrl+Shift+Z"
       },
-      "description": "Open Prism"
+      "description": "Open console"
     }
   },
   "background": {

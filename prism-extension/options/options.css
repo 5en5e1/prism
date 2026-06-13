@@ -1,17 +1,18 @@
 :root {
-  color-scheme: light;
+  color-scheme: dark;
   font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-  color: #1d2433;
-  background: #eef4f8;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --accent: #2563eb;
-  --accent-strong: #1d4ed8;
-  --cyan: #0891b2;
-  --rose: #e11d48;
-  --green: #059669;
-  --shadow-soft: 0 22px 60px rgba(15, 23, 42, 0.12);
-  --shadow-tight: 0 12px 28px rgba(15, 23, 42, 0.1);
+  color: #DDDDDD;
+  background: #222831;
+  --bg: #222831;
+  --surface: #30475E;
+  --text: #DDDDDD;
+  --accent: #F05454;
+  --bg-rgb: 34 40 49;
+  --surface-rgb: 48 71 94;
+  --text-rgb: 221 221 221;
+  --accent-rgb: 240 84 84;
+  --shadow-soft: 0 24px 62px rgb(var(--bg-rgb) / 0.58);
+  --shadow-tight: 0 14px 34px rgb(var(--bg-rgb) / 0.5);
 }
 
 * {
@@ -22,9 +23,9 @@ body {
   min-height: 100vh;
   margin: 0;
   background:
-    linear-gradient(135deg, rgba(8, 145, 178, 0.2) 0%, rgba(8, 145, 178, 0) 34%),
-    linear-gradient(225deg, rgba(225, 29, 72, 0.12) 0%, rgba(225, 29, 72, 0) 36%),
-    linear-gradient(180deg, #fbfdff 0%, #eef4f8 48%, #f6f7fb 100%);
+    radial-gradient(circle at 70% 8%, rgb(var(--accent-rgb) / 0.12), transparent 28%),
+    radial-gradient(circle at 18% 18%, rgb(var(--surface-rgb) / 0.45), transparent 34%),
+    linear-gradient(180deg, #222831 0%, #222831 100%);
 }
 
 body::before {
@@ -34,15 +35,14 @@ body::before {
   pointer-events: none;
   content: "";
   background:
-    linear-gradient(110deg, rgba(255, 255, 255, 0.6), rgba(255, 255, 255, 0) 42%),
-    repeating-linear-gradient(135deg, rgba(15, 23, 42, 0.035) 0 1px, transparent 1px 10px);
-  mix-blend-mode: multiply;
-  opacity: 0.55;
+    linear-gradient(120deg, transparent 0 24%, rgb(var(--text-rgb) / 0.04) 24% 24.35%, transparent 24.35% 100%),
+    repeating-linear-gradient(90deg, rgb(var(--text-rgb) / 0.025) 0 1px, transparent 1px 48px);
+  opacity: 0.64;
 }
 
 .settings-shell {
   display: grid;
-  gap: 26px;
+  gap: 22px;
   width: min(920px, calc(100vw - 32px));
   margin: 42px auto 56px;
 }
@@ -50,36 +50,60 @@ body::before {
 .page-hero,
 .cache-panel,
 .cache-card {
-  border: 1px solid rgba(255, 255, 255, 0.64);
+  border: 1px solid rgb(var(--accent-rgb) / 0.18);
   border-radius: 8px;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.74), rgba(255, 255, 255, 0.46));
-  backdrop-filter: blur(18px) saturate(1.2);
-  box-shadow: var(--shadow-tight), inset 0 1px 0 rgba(255, 255, 255, 0.82);
+  background:
+    linear-gradient(145deg, rgb(var(--surface-rgb) / 0.76), rgb(var(--surface-rgb) / 0.38)),
+    linear-gradient(180deg, rgb(var(--text-rgb) / 0.05), transparent);
+  backdrop-filter: blur(18px) saturate(1.18);
+  box-shadow: var(--shadow-tight), inset 0 1px 0 rgb(var(--text-rgb) / 0.08);
 }
 
 .page-hero {
   position: relative;
-  padding: 24px;
-  box-shadow: var(--shadow-soft), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  overflow: hidden;
+  min-height: 154px;
+  padding: 24px 148px 24px 24px;
+  box-shadow: var(--shadow-soft), inset 0 1px 0 rgb(var(--text-rgb) / 0.1);
+}
+
+.page-hero::before,
+.page-hero::after {
+  position: absolute;
+  pointer-events: none;
+  content: "";
 }
 
 .page-hero::before {
-  position: absolute;
-  top: 24px;
-  right: 24px;
-  width: 10px;
-  height: 10px;
-  border-radius: 999px;
-  content: "";
-  background: var(--green);
-  box-shadow: 0 0 0 6px rgba(5, 150, 105, 0.12);
+  top: 68px;
+  right: -18px;
+  width: 196px;
+  height: 20px;
+  border-top: 1px solid rgb(var(--accent-rgb) / 0.26);
+  border-bottom: 1px solid rgb(var(--accent-rgb) / 0.16);
+  background: linear-gradient(90deg, transparent, rgb(var(--accent-rgb) / 0.34), transparent);
+  box-shadow: 0 0 24px rgb(var(--accent-rgb) / 0.18);
+  transform: rotate(9deg);
+}
+
+.page-hero::after {
+  top: 34px;
+  right: 38px;
+  width: 92px;
+  height: 82px;
+  clip-path: polygon(50% 3%, 6% 96%, 94% 96%);
+  border-radius: 8px;
+  background:
+    linear-gradient(130deg, rgb(var(--text-rgb) / 0.18), transparent 32%),
+    linear-gradient(180deg, rgb(var(--surface-rgb) / 0.72), rgb(var(--surface-rgb) / 0.22));
+  filter: drop-shadow(0 0 16px rgb(var(--accent-rgb) / 0.36));
 }
 
 .eyebrow {
   margin: 0 0 5px;
-  color: var(--muted);
+  color: rgb(var(--text-rgb) / 0.62);
   font-size: 12px;
-  font-weight: 800;
+  font-weight: 820;
   letter-spacing: 0;
   text-transform: uppercase;
 }
@@ -91,25 +115,16 @@ p {
 }
 
 h1 {
-  max-width: calc(100% - 46px);
-  color: var(--ink);
+  max-width: 620px;
+  color: var(--text);
   font-size: 34px;
   line-height: 1.1;
 }
 
 h2 {
-  color: var(--ink);
+  color: var(--text);
   font-size: 20px;
   line-height: 1.2;
-}
-
-.hero-copy,
-.section-note {
-  max-width: 620px;
-  margin-top: 8px;
-  color: var(--muted);
-  font-size: 14px;
-  line-height: 1.45;
 }
 
 .panel {
@@ -151,23 +166,23 @@ button:hover {
 
 button:disabled {
   cursor: not-allowed;
-  opacity: 0.68;
+  opacity: 0.62;
   transform: none;
 }
 
 .danger-button {
   padding: 0 14px;
-  border-color: rgba(225, 29, 72, 0.18);
-  background: rgba(255, 241, 242, 0.74);
-  color: #be123c;
+  border-color: rgb(var(--accent-rgb) / 0.28);
+  background: rgb(var(--accent-rgb) / 0.1);
+  color: var(--text);
   backdrop-filter: blur(12px);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+  box-shadow: inset 0 1px 0 rgb(var(--text-rgb) / 0.08);
 }
 
 .danger-button:hover {
-  border-color: rgba(225, 29, 72, 0.32);
-  background: rgba(255, 228, 230, 0.86);
-  box-shadow: 0 12px 24px rgba(225, 29, 72, 0.12);
+  border-color: rgb(var(--accent-rgb) / 0.46);
+  background: rgb(var(--accent-rgb) / 0.16);
+  box-shadow: 0 12px 24px rgb(var(--accent-rgb) / 0.14);
 }
 
 .save-state {
@@ -197,9 +212,11 @@ button:disabled {
 }
 
 .cache-card:hover {
-  border-color: rgba(37, 99, 235, 0.28);
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.84), rgba(219, 234, 254, 0.48));
-  box-shadow: 0 14px 34px rgba(15, 23, 42, 0.12), inset 0 1px 0 rgba(255, 255, 255, 0.86);
+  border-color: rgb(var(--accent-rgb) / 0.34);
+  background:
+    linear-gradient(145deg, rgb(var(--surface-rgb) / 0.84), rgb(var(--surface-rgb) / 0.44)),
+    linear-gradient(90deg, rgb(var(--accent-rgb) / 0.1), transparent);
+  box-shadow: 0 14px 34px rgb(var(--bg-rgb) / 0.54), inset 0 1px 0 rgb(var(--text-rgb) / 0.1);
 }
 
 .cache-meta,
@@ -214,7 +231,7 @@ button:disabled {
 
 .cache-meta strong {
   overflow: hidden;
-  color: var(--ink);
+  color: var(--text);
   font-size: 14px;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -223,7 +240,7 @@ button:disabled {
 .cache-meta small,
 .cache-summary {
   overflow: hidden;
-  color: var(--muted);
+  color: rgb(var(--text-rgb) / 0.58);
   font-size: 12px;
   line-height: 1.35;
   text-overflow: ellipsis;
@@ -237,36 +254,36 @@ button:disabled {
 }
 
 .status-pill {
-  border: 1px solid rgba(37, 99, 235, 0.16);
+  border: 1px solid rgb(var(--accent-rgb) / 0.24);
   border-radius: 999px;
   padding: 4px 8px;
-  background: rgba(37, 99, 235, 0.1);
-  color: var(--accent-strong);
+  background: rgb(var(--accent-rgb) / 0.1);
+  color: var(--text);
   font-size: 11px;
   font-weight: 900;
 }
 
 .status-pill.original {
-  border-color: rgba(100, 116, 139, 0.2);
-  background: rgba(100, 116, 139, 0.1);
-  color: #475569;
+  border-color: rgb(var(--text-rgb) / 0.16);
+  background: rgb(var(--surface-rgb) / 0.34);
+  color: rgb(var(--text-rgb) / 0.72);
 }
 
 .status-pill.generated {
-  border-color: rgba(5, 150, 105, 0.16);
-  background: rgba(5, 150, 105, 0.1);
-  color: #047857;
+  border-color: rgb(var(--accent-rgb) / 0.34);
+  background: rgb(var(--accent-rgb) / 0.12);
+  color: var(--text);
 }
 
 .empty-state {
   display: grid;
   min-height: 72px;
   align-items: center;
-  border: 1px dashed rgba(148, 163, 184, 0.58);
+  border: 1px dashed rgb(var(--text-rgb) / 0.2);
   border-radius: 8px;
   padding: 16px;
-  color: var(--muted);
-  background: rgba(255, 255, 255, 0.46);
+  color: rgb(var(--text-rgb) / 0.58);
+  background: rgb(var(--surface-rgb) / 0.28);
   backdrop-filter: blur(12px);
   font-size: 14px;
   font-weight: 800;
@@ -276,6 +293,15 @@ button:disabled {
   .settings-shell {
     width: min(100% - 24px, 920px);
     margin: 24px auto 36px;
+  }
+
+  .page-hero {
+    padding: 22px;
+  }
+
+  .page-hero::before,
+  .page-hero::after {
+    opacity: 0.34;
   }
 
   .panel-heading,
@@ -302,6 +328,6 @@ button:disabled {
   .cache-card,
   .danger-button,
   .empty-state {
-    background-color: rgba(255, 255, 255, 0.92);
+    background-color: rgb(var(--surface-rgb) / 0.94);
   }
 }

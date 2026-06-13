@@ -1,4 +1,4 @@
-(function bootPrism() {
+(function bootExtension() {
   if (window.__prismExtensionLoaded) {
     return;
   }
@@ -690,9 +690,9 @@
         position: fixed;
         z-index: 2147483646;
         pointer-events: none;
-        border: 2px solid #2563eb;
-        background: rgba(37, 99, 235, 0.12);
-        box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.16);
+        border: 2px solid #F05454;
+        background: rgba(240, 84, 84, 0.12);
+        box-shadow: 0 0 0 4px rgba(240, 84, 84, 0.16);
         border-radius: 6px;
         transition: top 80ms ease, left 80ms ease, width 80ms ease, height 80ms ease;
       }
@@ -700,10 +700,10 @@
         position: fixed;
         z-index: 2147483645;
         pointer-events: none;
-        border: 2px solid #059669;
-        background: rgba(5, 150, 105, 0.1);
+        border: 2px solid #F05454;
+        background: rgba(48, 71, 94, 0.18);
         border-radius: 6px;
-        box-shadow: 0 0 0 4px rgba(5, 150, 105, 0.14);
+        box-shadow: 0 0 0 4px rgba(240, 84, 84, 0.14);
       }
       .prism-selected-marker::before {
         position: absolute;
@@ -712,8 +712,8 @@
         min-width: max-content;
         border-radius: 999px;
         padding: 4px 8px;
-        background: #059669;
-        color: white;
+        background: #30475E;
+        color: #DDDDDD;
         content: attr(data-prism-reference);
         font: 700 12px/1.2 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       }
@@ -732,7 +732,7 @@
     return selectionHighlight;
   }
 
-  function isPrismSelectionUi(node) {
+  function isExtensionSelectionUi(node) {
     return Boolean(
       node?.nodeType === Node.ELEMENT_NODE &&
         node.closest?.("#prism-element-highlight, .prism-selected-marker, #prism-element-selection-styles")
@@ -784,7 +784,7 @@
 
   function nearestMeaningfulElement(raw) {
     let el = raw?.nodeType === Node.ELEMENT_NODE ? raw : raw?.parentElement;
-    if (!el || isPrismSelectionUi(el)) {
+    if (!el || isExtensionSelectionUi(el)) {
       return null;
     }
 
@@ -1123,7 +1123,7 @@
     record.selectorCandidates.forEach((selector) => {
       try {
         document.querySelectorAll(selector).forEach((candidate) => {
-          if (!isPrismSelectionUi(candidate) && rectIsUsable(candidate.getBoundingClientRect())) {
+          if (!isExtensionSelectionUi(candidate) && rectIsUsable(candidate.getBoundingClientRect())) {
             matches.push(candidate);
           }
         });
@@ -1205,7 +1205,7 @@
       return;
     }
     selectionObserver = new MutationObserver((mutations) => {
-      const pageChanged = mutations.some((mutation) => !isPrismSelectionUi(mutation.target));
+      const pageChanged = mutations.some((mutation) => !isExtensionSelectionUi(mutation.target));
       if (pageChanged) {
         scheduleSelectionRefresh();
       }

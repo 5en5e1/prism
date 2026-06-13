@@ -499,7 +499,7 @@ async function setJobStatus(state, message, extra = {}) {
   try {
     await chrome.action.setBadgeText({ text: badge });
     await chrome.action.setBadgeBackgroundColor({
-      color: state === "error" ? "#dc2626" : "#2563eb"
+      color: state === "error" ? "#F05454" : "#30475E"
     });
   } catch (_error) {
     // Badge is cosmetic; never let it break the job.
@@ -905,7 +905,7 @@ async function startProcessJob(payload) {
   } catch (error) {
     await takePendingJob(requestId);
     await setJobStatus("error", error.message || "Could not start the request.", { pageUrl });
-    notify("Prism failed", error.message || "Could not start the request.");
+    notify("Request failed", error.message || "Could not start the request.");
     stopKeepAlive();
     await closeOffscreenIfIdle();
     throw error;
@@ -1009,11 +1009,11 @@ async function finalizeJob(message) {
 
     const partialNote = data.status === "partial" ? " (partial result)" : "";
     await setJobStatus("done", `Done${partialNote}. ${changesSummary}`.trim(), { pageUrl });
-    notify("Prism done", `${changesSummary || "Changes applied."} ${pageUrl}`);
+    notify("Changes applied", `${changesSummary || "Changes applied."} ${pageUrl}`);
   } catch (error) {
     const errorMessage = error.message || "Processing failed.";
     await setJobStatus("error", errorMessage, { pageUrl });
-    notify("Prism failed", errorMessage);
+    notify("Request failed", errorMessage);
   } finally {
     stopKeepAlive();
     await closeOffscreenIfIdle();
