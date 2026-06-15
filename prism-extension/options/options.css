@@ -67,36 +67,138 @@ body::before {
   box-shadow: var(--shadow-soft), inset 0 1px 0 rgb(var(--text-rgb) / 0.1);
 }
 
-.page-hero::before,
-.page-hero::after {
+.page-hero::before {
   position: absolute;
+  inset: 0;
   pointer-events: none;
   content: "";
-}
-
-.page-hero::before {
-  top: 68px;
-  right: -18px;
-  width: 196px;
-  height: 20px;
-  border-top: 1px solid rgb(var(--accent-rgb) / 0.26);
-  border-bottom: 1px solid rgb(var(--accent-rgb) / 0.16);
-  background: linear-gradient(90deg, transparent, rgb(var(--accent-rgb) / 0.34), transparent);
-  box-shadow: 0 0 24px rgb(var(--accent-rgb) / 0.18);
-  transform: rotate(9deg);
-}
-
-.page-hero::after {
-  top: 34px;
-  right: 38px;
-  width: 92px;
-  height: 82px;
-  clip-path: polygon(50% 3%, 6% 96%, 94% 96%);
-  border-radius: 8px;
   background:
-    linear-gradient(130deg, rgb(var(--text-rgb) / 0.18), transparent 32%),
-    linear-gradient(180deg, rgb(var(--surface-rgb) / 0.72), rgb(var(--surface-rgb) / 0.22));
-  filter: drop-shadow(0 0 16px rgb(var(--accent-rgb) / 0.36));
+    radial-gradient(circle at 86% 48%, rgb(var(--accent-rgb) / 0.12), transparent 24%),
+    linear-gradient(115deg, transparent 0 44%, rgb(var(--text-rgb) / 0.035) 44% 44.4%, transparent 44.4% 100%);
+}
+
+.settings-pyramid-scene {
+  position: absolute;
+  top: 27px;
+  right: 34px;
+  z-index: 2;
+  width: 112px;
+  height: 96px;
+  overflow: visible;
+  perspective: 460px;
+  transform-style: preserve-3d;
+}
+
+.settings-pyramid-scene::before {
+  position: absolute;
+  inset: 48px 16px 4px;
+  content: "";
+  border-radius: 999px;
+  background: rgb(var(--bg-rgb) / 0.26);
+  filter: blur(10px);
+}
+
+.pyramid-object {
+  position: absolute;
+  top: 10px;
+  left: 25px;
+  z-index: 3;
+  width: 62px;
+  height: 62px;
+  transform-style: preserve-3d;
+  animation: pyramid-spin 9s linear infinite;
+}
+
+.pyramid-object:hover {
+  animation-play-state: paused;
+}
+
+.pyramid-core {
+  position: absolute;
+  inset: 0;
+  transform-style: preserve-3d;
+}
+
+.pyramid-face {
+  position: absolute;
+  inset: 0;
+  transform-origin: 50% 100%;
+  backface-visibility: visible;
+  clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
+  background: rgb(var(--accent-rgb) / 0.78);
+  filter: drop-shadow(0 0 6px rgb(var(--accent-rgb) / 0.5));
+}
+
+.pyramid-face::after {
+  position: absolute;
+  inset: 2px;
+  content: "";
+  clip-path: inherit;
+  background:
+    linear-gradient(132deg, rgb(var(--text-rgb) / 0.24), transparent 26%),
+    linear-gradient(180deg, rgb(var(--surface-rgb) / 0.82), rgb(var(--surface-rgb) / 0.34) 58%, rgb(var(--accent-rgb) / 0.18));
+}
+
+.pyramid-face-front {
+  opacity: 0.82;
+  transform: rotateY(0deg) translateZ(31px) rotateX(30deg);
+}
+
+.pyramid-face-right {
+  opacity: 0.58;
+  transform: rotateY(90deg) translateZ(31px) rotateX(30deg);
+}
+
+.pyramid-face-back::after {
+  background:
+    linear-gradient(132deg, rgb(var(--text-rgb) / 0.14), transparent 30%),
+    linear-gradient(180deg, rgb(var(--surface-rgb) / 0.42), rgb(var(--bg-rgb) / 0.3) 70%);
+}
+
+.pyramid-face-back {
+  opacity: 0.36;
+  transform: rotateY(180deg) translateZ(31px) rotateX(30deg);
+}
+
+.pyramid-face-left {
+  opacity: 0.58;
+  transform: rotateY(270deg) translateZ(31px) rotateX(30deg);
+}
+
+.pyramid-base {
+  position: absolute;
+  inset: 0;
+  background:
+    linear-gradient(135deg, rgb(var(--surface-rgb) / 0.5), rgb(var(--bg-rgb) / 0.42)),
+    rgb(var(--surface-rgb) / 0.34);
+  box-shadow:
+    inset 0 0 0 1px rgb(var(--accent-rgb) / 0.32),
+    0 0 18px rgb(var(--accent-rgb) / 0.28);
+  opacity: 0.62;
+  transform: rotateX(90deg) translateZ(-31px);
+}
+
+.pyramid-shadow {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 62px;
+  height: 62px;
+  border-radius: 999px;
+  background: rgb(var(--bg-rgb) / 0.32);
+  transform: rotateX(90deg) translateZ(-46px);
+  filter: blur(9px);
+  box-shadow: 0 0 30px rgb(var(--bg-rgb) / 0.36);
+}
+
+@keyframes pyramid-spin {
+  0% {
+    transform: rotateX(-30deg) rotateY(45deg);
+  }
+
+  100% {
+    transform: rotateX(-30deg) rotateY(405deg);
+  }
 }
 
 .eyebrow {
@@ -300,7 +402,7 @@ button:disabled {
   }
 
   .page-hero::before,
-  .page-hero::after {
+  .settings-pyramid-scene {
     opacity: 0.34;
   }
 
