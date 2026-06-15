@@ -1114,7 +1114,8 @@ function referencePattern(reference, flags = "") {
 }
 
 function promptHasReference(reference, text = promptInput.value) {
-  return referencePattern(reference).test(text);
+  const escaped = reference.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`'${escaped}'|\\b${escaped}\\b`).test(text);
 }
 
 function replacePromptReference(text, oldReference, newReference) {
@@ -1148,6 +1149,9 @@ async function syncSelectionSessionToActiveTab() {
       type: "SYNC_ELEMENT_SELECTION_SESSION",
       payload: {
         tabId: tab.id,
+        tabStateKey: activeTabKey,
+        pageUrl: tab.url,
+        pageKey: pageStateKey(tab),
         promptText: promptInput.value,
         selectionStart: promptInput.selectionStart || 0,
         selectionEnd: promptInput.selectionEnd || promptInput.selectionStart || 0,
@@ -1157,6 +1161,36 @@ async function syncSelectionSessionToActiveTab() {
     },
     3000
   ).catch(() => {});
+}
+
+async function resumeElementSelectionIfNeeded() {
+  if (!currentTabState.selectionMode) {
+    return;
+  }
+  const tab = activeTab || (await getActiveTab().catch(() => null));
+  if (!tab?.id) {
+    return;
+  }
+  await ensureContentScript(tab);
+  const nextReference = nextElementReference(currentTabState.selectedElements || []);
+  currentTabState.nextElementIndex = Number(nextReference.replace(/^element/, "")) || 1;
+  await sendRuntimeMessage(
+    {
+      type: "BEGIN_ELEMENT_SELECTION",
+      payload: {
+        tabId: tab.id,
+        tabStateKey: activeTabKey,
+        pageUrl: tab.url,
+        pageKey: pageStateKey(tab),
+        promptText: promptInput.value,
+        selectionStart: promptInput.selectionStart || 0,
+        selectionEnd: promptInput.selectionEnd || promptInput.selectionStart || 0,
+        nextReference,
+        selectedElements: currentTabState.selectedElements || []
+      }
+    },
+    7000
+  );
 }
 
 async function syncSelectedMarkersToTab(visible = currentTabState.selectionMode) {
@@ -1230,6 +1264,10 @@ async function removeSelectedReference(reference) {
 }
 
 async function reconcileSelectedElementsFromPrompt() {
+  if (currentTabState.selectionMode) {
+    await syncSelectionSessionToActiveTab();
+    return;
+  }
   if (!compactSelectedElementsToPrompt()) {
     return;
   }
@@ -1762,6 +1800,9 @@ async function loadTabState(tab) {
   cancelElementPick.hidden = !currentTabState.selectionMode;
   renderSelectedElements();
   renderCacheState();
+  await resumeElementSelectionIfNeeded().catch((error) => {
+    setComposerStatus(error.message || "Could not resume element selection.", "error", true);
+  });
 }
 
 // Mode buttons are created (with their click handlers) in renderModes().

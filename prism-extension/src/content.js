@@ -828,6 +828,13 @@
     overlay.hidden = false;
   }
 
+  function clearSelectionHighlight() {
+    selectionState.hovered = null;
+    if (selectionHighlight) {
+      selectionHighlight.hidden = true;
+    }
+  }
+
   function handleSelectionPointerMove(event) {
     if (!selectionState.active) {
       return;
@@ -1285,7 +1292,7 @@
         }
         selectionState.reference = response.nextReference || selectionState.reference;
         restoreSelectedMarkers(response.selectedElements || [], true);
-        updateSelectionHighlight(selectionState.hovered);
+        clearSelectionHighlight();
       });
       return;
     }
@@ -1310,7 +1317,7 @@
       if (Array.isArray(response.selectedElements)) {
         restoreSelectedMarkers(response.selectedElements, true);
       }
-      updateSelectionHighlight(selectionState.hovered);
+      clearSelectionHighlight();
     });
   }
 
@@ -1327,6 +1334,7 @@
     selectionState = { active: true, reference: reference || "element1", hovered: null, pending: false };
     ensureSelectionHighlight();
     restoreSelectedMarkers(selectedElements, true);
+    clearSelectionHighlight();
     ensureSelectionObserver();
     document.addEventListener("pointermove", handleSelectionPointerMove, true);
     document.addEventListener("pointerdown", blockSelectionEvent, true);
@@ -1345,6 +1353,7 @@
       selectionState.reference = reference;
     }
     restoreSelectedMarkers(selectedElements, Boolean(markersVisible));
+    clearSelectionHighlight();
   }
 
   function stopElementSelection(options = {}) {
@@ -1389,13 +1398,9 @@
       navigationEpoch: browserSession.navigationEpoch + 1,
       liveDomValid: false
     };
-    const hadActiveSelection = selectionState.active;
     resetRuntimePatchState();
     stopElementSelection();
     clearSelectedElementMarkers();
-    if (hadActiveSelection) {
-      chrome.runtime.sendMessage({ type: "ELEMENT_SELECTION_CANCELLED" });
-    }
     window.setTimeout(() => {
       browserSession.liveDomValid = true;
       applyCachedPatches();
