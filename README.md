@@ -30,6 +30,18 @@ The important workflow is:
 6. Generate the change.
 7. Restore or delete saved versions from the popup.
 
+## Example: Removing A Selected Element
+
+This example selects the GitHub profile avatar as `'element1'` and asks Prism:
+
+```text
+please remove 'element1'?
+```
+
+| Before | After |
+| --- | --- |
+| ![Before selecting and removing a GitHub profile avatar](docs/readme-media/before-example.png) | ![After Prism removes the selected GitHub profile avatar](docs/readme-media/after-example.png) |
+
 ## Style Templates
 
 Style templates are visual design presets. The extension fetches the available style templates from:
